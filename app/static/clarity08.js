@@ -31,9 +31,13 @@ function formConfig08(){
   const form=$('protocol');if(!form.reportValidity())throw Error('V\u00e9rifie les champs du formulaire.');const d=new FormData(form),p={};
   for(const k of ['n_kc','seed','sparsity','epochs','epsilon','learning_rate','max_windows','batch'])p[k]=Number(d.get(k));
   for(const k of ['mode','signal'])p[k]=d.get(k);
-  for(const k of ['use_liquidity','shuffle_train','economic_head'])p[k]=form.elements[k].checked;
+  for(const k of ['use_liquidity','shuffle_train'])p[k]=form.elements[k].checked;
+  p.economic_head=false;
   return p;
 }
+const economicHead08=$('protocol').elements.economic_head;
+economicHead08.checked=false;economicHead08.disabled=true;
+economicHead08.closest('label').lastElementChild.textContent='Désactivée pour le protocole scientifique H / S / B.';
 function syncConfig08(){if(!T||loadedSession08===T.session)return;loadedSession08=T.session;for(const[k,v]of Object.entries(T.config)){const e=$('protocol').elements[k];if(!e)continue;if(e.type==='checkbox')e.checked=v;else {e.value=String(v);if(e.tagName==='SELECT'&&e.selectedIndex<0){const option=[...e.options].find(o=>typeof v==='number'&&Number(o.value)===v);if(option)e.value=option.value;}}}}
 function readyHint08(){
   if(!T||!S)return 'Lecture de l\u2019\u00e9tat du serveur...';

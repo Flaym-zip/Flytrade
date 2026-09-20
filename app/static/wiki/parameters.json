@@ -1,6 +1,6 @@
 {
   "version": "0.8.0-alpha",
-  "code_sha256": "616735b3afa226693aa6f71d30b88d08ae77726f3ded37b670722dd855f64c54",
+  "code_sha256": "569ce649b4bf4ea6f8be780701d39a970e6064bff05ca9d713afd9935e58345b",
   "groups": [
     {
       "name": "Entrainement",
@@ -143,12 +143,21 @@
           "key": "economic_head",
           "title": "Lecture economique auxiliaire",
           "unit": "Booleen",
-          "default": true,
+          "default": false,
           "limits": {
             "type": "boolean"
           },
-          "description": "Entraine des poids distincts a predire tanh(resultat net par unite / 2), seulement si une cotation differee a ete enregistree. Cette sortie n'est pas une probabilite ni le PnL attendu; elle n'est pas utilisee pour choisir la mise.",
-          "caution": "Le taux de cette lecture vaut 0.4 fois learning_rate."
+          "description": "Toujours desactivee pendant l'apprentissage scientifique H/S/B : aucune mise, aucun portefeuille, aucun multiplicateur n'entre dans cette boucle. La tete economique n'existe que dans le marche live, separement de ce protocole.",
+          "caution": "Champ verrouille a false; conserve pour compatibilite des anciens points de controle."
+        },
+        {
+          "key": "dataset_id",
+          "title": "Identifiant de dataset",
+          "unit": "UUID ou vide",
+          "default": null,
+          "limits": {},
+          "description": "Selectionne le dataset importe explicitement utilise pour la separation TRAIN/VALIDATION/TEST. Deux imports Kraken distincts restent deux datasets distincts; vide, le seul dataset disponible pour la source est choisi automatiquement.",
+          "caution": "Plusieurs datasets disponibles sans choix explicite : le protocole refuse de demarrer."
         },
         {
           "key": "max_windows",

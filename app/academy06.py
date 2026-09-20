@@ -3,7 +3,7 @@ No oracle labels enter decide(). Economic targets use recorded delayed quotes,
 never newly invented historic quotes. The value head is auxiliary, not calibrated p.
 """
 from __future__ import annotations
-import copy, hashlib, json, math, sqlite3, time
+import copy, hashlib, json, math, sqlite3, time, uuid
 from collections import Counter
 from dataclasses import replace
 from pathlib import Path
@@ -14,8 +14,8 @@ from .dataset import normalize,Episode,split_chronological,canonical
 from .brain06 import Brain06
 from .compartment_brain import CircuitSettings
 from .economics import Calibrator
-from .economy06 import net_result
 from .engine import stamp
+from .metrics import stats_from_confusion
 
 
 class Config06(BaseModel):
@@ -30,7 +30,8 @@ class Config06(BaseModel):
     epsilon:float=Field(default=.15,ge=0,le=1)
     sparsity:float=Field(default=.05,ge=.01,le=.5)
     use_liquidity:StrictBool=True
-    economic_head:StrictBool=True
+    economic_head:Literal[False]=False
+    dataset_id:str|None=None
     max_windows:int=Field(default=10000,ge=30,le=50000)
     batch:int=Field(default=10,ge=1,le=40)
 
@@ -76,14 +77,84 @@ class Academy06:
         CREATE INDEX IF NOT EXISTS corpus_placed ON corpus(placed);
         CREATE TABLE IF NOT EXISTS state(id INTEGER PRIMARY KEY,payload TEXT);
         CREATE TABLE IF NOT EXISTS records(session TEXT,step INTEGER,phase TEXT,payload TEXT,PRIMARY KEY(session,step));
-        CREATE TABLE IF NOT EXISTS archives(session TEXT PRIMARY KEY,payload TEXT);''')
+        CREATE TABLE IF NOT EXISTS archives(session TEXT PRIMARY KEY,payload TEXT);
+        CREATE TABLE IF NOT EXISTS datasets(dataset_id TEXT PRIMARY KEY,name TEXT NOT NULL,source TEXT NOT NULL,
+          content_hash TEXT NOT NULL,imported_at TEXT NOT NULL,windows INTEGER NOT NULL,first REAL,last REAL,
+          with_liquidity INTEGER NOT NULL,stats TEXT NOT NULL,parents TEXT NOT NULL,allow_exposed_training INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS dataset_windows(dataset_id TEXT NOT NULL,uid TEXT NOT NULL,position INTEGER NOT NULL,
+          PRIMARY KEY(dataset_id,uid),FOREIGN KEY(dataset_id) REFERENCES datasets(dataset_id));
+        CREATE INDEX IF NOT EXISTS dataset_windows_order ON dataset_windows(dataset_id,position);''')
         self.config=Config06();self.brain=Brain06();self.calibrator=Calibrator(min_total=60,min_bin=20)
         self.session=None;self.plan=[];self.position=0;self.split_report=None;self.splits=None
         self.auto=False;self.error=None;self.test_opened=False;self.cal_scores=[];self.cal_labels=[]
         self.last=None;self.last_decision=None;self.metrics={};self.import_report=None
+        self._migrate_legacy_datasets()
         raw=self.db.execute('SELECT payload FROM state WHERE id=1').fetchone()
-        if raw:self.restore(json.loads(raw[0]))
+        if raw:
+            original=json.loads(raw[0]);self.restore(original)
+            if original.get('brain',{}).get('schema')!=Brain06.SCHEMA:self.save()
         self.auto=False
+
+    def _migrate_legacy_datasets(self):
+        if self.db.execute('SELECT COUNT(*) FROM datasets').fetchone()[0]:return
+        groups={}
+        for uid,placed,raw in self.db.execute('SELECT uid,placed,payload FROM corpus ORDER BY placed,uid'):
+            source=str(json.loads(raw)['episode']['source']);groups.setdefault(source,[]).append((uid,placed,raw))
+        with self.db:
+            for source,rows in groups.items():
+                digest=hashlib.sha256();eps=[];liquid=0
+                for _,_,raw in rows:
+                    digest.update(raw.encode());digest.update(b'\n');v=json.loads(raw)
+                    eps.append(Episode.from_dict(v['episode']));liquid+=int(bool(v.get('book')))
+                dataset_id=str(uuid.uuid5(uuid.NAMESPACE_URL,'flytrade-legacy-dataset:'+source+':'+digest.hexdigest()))
+                stats=self._dataset_stats(eps)
+                self.db.execute('INSERT INTO datasets VALUES (?,?,?,?,?,?,?,?,?,?,?,0)',
+                    (dataset_id,'Corpus herite '+source,source,digest.hexdigest(),stamp(),len(rows),stats['first'],stats['last'],liquid,canonical(stats),'[]'))
+                self.db.executemany('INSERT INTO dataset_windows VALUES (?,?,?)',[(dataset_id,r[0],i) for i,r in enumerate(rows)])
+
+    @staticmethod
+    def _dataset_stats(eps):
+        counts=Counter(e.category for e in eps)
+        return {'hausse':counts['hausse'],'stable':counts['stable'],'baisse':counts['baisse'],
+                'multiple':counts['multiple'],'aucune':counts['aucune'],
+                'first':min((e.placed for e in eps),default=None),'last':max((e.end for e in eps),default=None)}
+
+    def datasets(self):
+        result=[]
+        for row in self.db.execute('SELECT dataset_id,name,source,content_hash,imported_at,windows,first,last,with_liquidity,stats,parents,allow_exposed_training FROM datasets ORDER BY rowid'):
+            keys=('dataset_id','name','source','content_hash','imported_at','windows','first','last','with_liquidity','stats','parents','allow_exposed_training')
+            d=dict(zip(keys,row));d['stats']=json.loads(d['stats']);d['parents']=json.loads(d['parents']);d['with_liquidity']=bool(d['with_liquidity']);d['allow_exposed_training']=bool(d['allow_exposed_training']);result.append(d)
+        return result
+
+    def create_dataset_version(self,dataset_ids,name,allow_exposed_training=False):
+        ids=list(dict.fromkeys(dataset_ids))
+        if not ids or not name.strip():raise ValueError('Nom et dataset source requis')
+        rows=[];sources=set()
+        for dataset_id in ids:
+            info=self.db.execute('SELECT source FROM datasets WHERE dataset_id=?',(dataset_id,)).fetchone()
+            if not info:raise ValueError('Dataset parent introuvable')
+            sources.add(info[0])
+            rows.extend(self.db.execute('SELECT uid FROM dataset_windows WHERE dataset_id=? ORDER BY position',(dataset_id,)))
+        if len(sources)!=1:raise ValueError('Impossible de fusionner des sources differentes')
+        uids=list(dict.fromkeys(r[0] for r in rows));eps=[];liquid=0;digest=hashlib.sha256()
+        for uid in uids:
+            raw=self.db.execute('SELECT payload FROM corpus WHERE uid=?',(uid,)).fetchone()[0]
+            digest.update(raw.encode());digest.update(b'\n');v=json.loads(raw)
+            eps.append(Episode.from_dict(v['episode']));liquid+=int(bool(v.get('book')))
+        dataset_id=str(uuid.uuid4());stats=self._dataset_stats(eps)
+        with self.db:
+            self.db.execute('INSERT INTO datasets VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+                (dataset_id,name.strip()[:120],next(iter(sources)),digest.hexdigest(),stamp(),len(uids),stats['first'],stats['last'],liquid,canonical(stats),canonical(ids),int(allow_exposed_training)))
+            self.db.executemany('INSERT INTO dataset_windows VALUES (?,?,?)',[(dataset_id,uid,i) for i,uid in enumerate(uids)])
+        return next(d for d in self.datasets() if d['dataset_id']==dataset_id)
+
+    def _default_dataset_id(self):
+        requested=(self.import_report or {}).get('dataset_id')
+        if requested and self.db.execute('SELECT 1 FROM datasets WHERE dataset_id=?',(requested,)).fetchone():return requested
+        rows=self.db.execute('SELECT dataset_id FROM datasets WHERE source=? ORDER BY rowid DESC',(self.expected_source,)).fetchall() if self.expected_source else self.db.execute('SELECT dataset_id FROM datasets ORDER BY rowid DESC').fetchall()
+        if len(rows)==1:return rows[0][0]
+        if not rows:raise ValueError('Importer ou choisir un dataset avant de creer un protocole')
+        raise ValueError('Plusieurs datasets disponibles : choisir explicitement dataset_id')
 
     def checkpoint(self):
         return dict(version='0.7.0-alpha',config=self.config.model_dump(),brain=self.brain.to_dict(),
@@ -93,8 +164,15 @@ class Academy06:
             import_report=self.import_report)
 
     def restore(self,d):
-        self.config=Config06(**d['config']);self.brain=Brain06.from_dict(d['brain'])
+        raw_config=dict(d['config']);raw_config['economic_head']=False
+        if not raw_config.get('dataset_id'):
+            try:raw_config['dataset_id']=self._default_dataset_id()
+            except ValueError:raw_config['dataset_id']=None
+        self.config=Config06(**raw_config)
+        schema=d['brain'].get('schema')
+        self.brain=Brain06.from_dict(d['brain']) if schema==Brain06.SCHEMA else Brain06.import_legacy(d['brain'],'academy:'+str(self.db.execute('PRAGMA database_list').fetchone()[2])+':'+str(d.get('session')))
         self.calibrator=Calibrator.from_dict(d['calibrator'])
+        if self.calibrator.n and self.calibrator.fingerprint!=self.brain.fingerprint():raise ValueError('Calibration incompatible avec les poids')
         for k in ('session','plan','position','split_report','splits','test_opened','cal_scores','cal_labels','last','metrics','import_report'):
             setattr(self,k,d.get(k))
 
@@ -104,9 +182,9 @@ class Academy06:
                 (self.session,r['step'],r['phase'],canonical(r)))
             self.db.execute('INSERT OR REPLACE INTO state VALUES (1,?)',(canonical(self.checkpoint()),))
 
-    def import_lines(self,lines,origin='upload'):
+    def import_lines(self,lines,origin='upload',name=None):
         if self.auto:raise ValueError('Mettre l\'apprentissage en pause avant import')
-        counts=Counter();sha=hashlib.sha256();total=0;valid=0;liquid=0;quotes=0
+        counts=Counter();sha=hashlib.sha256();total=0;valid=0;liquid=0;quotes=0;members={};sources=set();episodes={}
         # Stream records, corpus grows on disk; 100 MiB guard for uploads is in API.
         with self.db:
             for line in lines:
@@ -122,23 +200,37 @@ class Academy06:
                     prior=self.db.execute('SELECT payload FROM corpus WHERE uid=?',(ep.uid,)).fetchone()
                     if prior:
                         if prior[0]!=payload:raise ValueError('doublon_contradictoire')
-                        counts['doublon']+=1;continue
-                    self.db.execute('INSERT INTO corpus VALUES (?,?,?)',(ep.uid,ep.placed,payload))
-                    valid+=1;liquid+=int(v['book'] is not None);quotes+=int(v['quote'] is not None)
+                        counts['doublon']+=1
+                    else:
+                        self.db.execute('INSERT INTO corpus VALUES (?,?,?)',(ep.uid,ep.placed,payload));valid+=1
+                    members.setdefault(ep.uid,len(members));sources.add(ep.source);episodes[ep.uid]=ep
+                    liquid+=int(v['book'] is not None);quotes+=int(v['quote'] is not None)
                 except (ValueError,TypeError,KeyError,IndexError,OverflowError) as e:
                     counts[str(e)[:80] if isinstance(e,ValueError) else 'schema_invalide']+=1
-        self.import_report=dict(origin=origin,at=stamp(),sha256=sha.hexdigest(),lines=total,added=valid,
+            dataset_id=None
+            if members:
+                if len(sources)!=1:raise ValueError('Un import doit contenir une seule source')
+                dataset_id=str(uuid.uuid4());source=next(iter(sources));stats=self._dataset_stats(list(episodes.values()))
+                self.db.execute('INSERT INTO datasets VALUES (?,?,?,?,?,?,?,?,?,?,?,0)',
+                    (dataset_id,(name or origin or 'Dataset').strip()[:120],source,sha.hexdigest(),stamp(),len(members),stats['first'],stats['last'],liquid,canonical(stats),'[]'))
+                self.db.executemany('INSERT INTO dataset_windows VALUES (?,?,?)',[(dataset_id,uid,pos) for uid,pos in members.items()])
+        self.import_report=dict(origin=origin,at=stamp(),sha256=sha.hexdigest(),dataset_id=dataset_id,lines=total,added=valid,windows=len(members),
                                 with_liquidity=liquid,with_delayed_quotes=quotes,rejected=dict(counts))
         self.save();return self.import_report
 
-    def import_live(self,run_db):
+    def import_live(self,run_db,name=None):
         source=sqlite3.connect(f'file:{Path(run_db).absolute()}?mode=ro',uri=True)
-        try:return self.import_lines((r[0] for r in source.execute('SELECT payload FROM opportunities ORDER BY id')),'collecte06')
+        try:return self.import_lines((r[0] for r in source.execute('SELECT payload FROM opportunities ORDER BY id')),'collecte06',name)
         finally:source.close()
 
     def create(self,config):
         if self.auto:raise ValueError('Mettre l\'apprentissage en pause')
-        cursor=self.db.execute('SELECT payload FROM corpus ORDER BY placed DESC LIMIT ?', (config.max_windows,))
+        dataset_id=config.dataset_id or self._default_dataset_id()
+        info=self.db.execute('SELECT source FROM datasets WHERE dataset_id=?',(dataset_id,)).fetchone()
+        if not info:raise ValueError('Dataset introuvable')
+        if self.expected_source and info[0]!=self.expected_source:raise ValueError('Dataset incompatible avec la source active')
+        config=config.model_copy(update={'dataset_id':dataset_id,'economic_head':False})
+        cursor=self.db.execute('SELECT c.payload FROM dataset_windows d JOIN corpus c ON c.uid=d.uid WHERE d.dataset_id=? ORDER BY d.position DESC LIMIT ?', (dataset_id,config.max_windows))
         eps=[];corpus_digest=hashlib.sha256()
         for raw, in cursor:
             v=json.loads(raw)
@@ -146,6 +238,7 @@ class Academy06:
             # Full tick lists remain on disk; split needs only support and outcomes.
             ep=Episode.from_dict(v['episode'])
             if self.expected_source and ep.source!=self.expected_source: continue
+            if sum(ep.touches)!=1:continue
             eps.append(replace(ep,ticks=()))
             corpus_digest.update(raw.encode());corpus_digest.update(b'\n')
         splits,report=split_chronological(eps)
@@ -196,10 +289,6 @@ class Academy06:
                 update=None;value=None
                 if training:
                     update=self.brain.learn_outcomes(d,ep.touches,self.config.learning_rate,self.config.signal)
-                    if self.config.economic_head and v['quote']:
-                        m=v['quote']['effective_gross'];cost=v['quote'].get('cost_per_stake',0)
-                        targets=[net_result(ep.touches[a],m[a],1.,cost) if m[a] is not None and (self.config.signal=='all' or a==d.action) else None for a in range(3)]
-                        value=self.brain.learn_financial(d,targets,rate=self.config.learning_rate*.4)
                 elif phase=='Calibration gelee':
                     self.cal_scores.append(d.scores.tolist());self.cal_labels.append(list(ep.touches))
                 self.position+=1
@@ -216,6 +305,9 @@ class Academy06:
                 m['n']+=1;m['wins']+=int(rec['win']);m['choices'][d.action]+=1
                 for a in range(3):m['always'][a]+=int(ep.touches[a])
                 m['value_updates']+=int(value is not None)
+                m.setdefault('confusion_matrix',[[0,0,0] for _ in range(3)])
+                actual=ep.touches.index(True);m['confusion_matrix'][actual][d.action]+=1
+                m.update(stats_from_confusion(m['confusion_matrix']))
             self.save(output)
         except Exception as e:
             self.restore(old);self.auto=False;self.error=str(e);raise

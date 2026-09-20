@@ -116,13 +116,14 @@ class MotifBrain:
         codes, features, pns, thresholds = self.encode_candidates(obs, config)
         activity, values, q = self.evaluate(codes, config)
         explore = bool(self.rng.random() < epsilon)
-        a = int(self.rng.integers(3)) if explore else int(self.rng.choice(
-            np.flatnonzero(np.isclose(q, q.max(), rtol=0, atol=1e-12))))
+        tied=np.flatnonzero(np.isclose(q,q.max(),rtol=0,atol=1e-12))
+        a = int(self.rng.integers(3)) if explore else int(self.rng.choice(tied))
         return Decision(a, explore, codes[a], (q+1)/2, (1-q)/2, q, features[a], {
             'config': asdict(config), 'pn': pns[a].tolist(), 'apl': float(thresholds[a]),
             'codes': codes.tolist(), 'activities': activity.tolist(), 'values': values.tolist(),
             'features_all': features.tolist(), 'reversal': self.reversal,
-            'mbon_activity': activity[:, a].tolist()})
+            'mbon_activity': activity[:, a].tolist(),
+            'preferred_candidates': tied.tolist(), 'tie_break': bool(len(tied)>1)})
 
     def reinforce(self, decision: Decision, reward: float, learning_rate: float,
                   enabled: bool = True, credit_delay: float = 0.) -> dict[str, Any]:

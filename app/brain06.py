@@ -5,18 +5,22 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import uuid
 import numpy as np
 from .decision_brain import DecisionBrain
 
 ENCODER06 = 'grid-liquidity-risk-v4'
 
 class Brain06(DecisionBrain):
-    def __init__(self, seed=42, sparsity=.05, use_liquidity=False, n_kc=2048):
+    SCHEMA = 2
+
+    def __init__(self, seed=42, sparsity=.05, use_liquidity=False, n_kc=2048, brain_id=None):
         if n_kc not in (1024, 2048):
             raise ValueError('Choisir 1024 ou 2048 KC')
         if not .01 <= sparsity <= .5:
             raise ValueError('Activite KC invalide')
         self.n_kc = int(n_kc)
+        self.brain_id = str(uuid.UUID(brain_id)) if brain_id else str(uuid.uuid4())
         self.seed = int(seed)
         self.sparsity = float(sparsity)
         self.use_liquidity = bool(use_liquidity)
@@ -81,21 +85,28 @@ class Brain06(DecisionBrain):
 
     def to_dict(self):
         d = super().to_dict()
-        d.update(kind='synthetic-risk06', encoder=ENCODER06, n_kc=self.n_kc,
+        d.update(schema=self.SCHEMA, kind='synthetic-risk06', encoder=ENCODER06,
+                 brain_id=self.brain_id, n_kc=self.n_kc,
                  value_weights=self.value_weights.tolist(), value_updates=self.value_updates)
         return d
 
     def fingerprint(self):
         d = self.to_dict()
-        for k in ('visits', 'rng', 'updates', 'value_weights', 'value_updates'):
+        for k in ('brain_id', 'visits', 'rng', 'updates', 'value_weights', 'value_updates'):
             d.pop(k, None)
+        # Keep the historical weight identity stable across the metadata migration.
+        d['schema']=1
         return hashlib.sha256(json.dumps(d, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
 
     @classmethod
     def from_dict(cls, d):
+        if d.get('schema') != cls.SCHEMA:
+            raise ValueError('Schema de poids incompatible')
         if d.get('kind') != 'synthetic-risk06' or d.get('encoder') != ENCODER06:
             raise ValueError('Poids incompatibles : reentrainer en alpha06, pas de conversion implicite')
-        b = cls(int(d['seed']), float(d['sparsity']), bool(d['use_liquidity']), int(d['n_kc']))
+        try:brain_id=str(uuid.UUID(d['brain_id']))
+        except (KeyError, ValueError, TypeError, AttributeError):raise ValueError('brain_id absent ou invalide')
+        b = cls(int(d['seed']), float(d['sparsity']), bool(d['use_liquidity']), int(d['n_kc']),brain_id)
         for key, shape in [('indices',(b.n_kc,6)), ('input_weights',(b.n_kc,6)),
                            ('weights',(5,b.n_kc)), ('visits',(b.n_kc,)), ('value_weights',(b.n_kc,))]:
             v = np.array(d[key])
@@ -112,3 +123,15 @@ class Brain06(DecisionBrain):
         if min(b.updates,b.value_updates)<0: raise ValueError('Compteurs invalides')
         b.reversal=bool(d['reversal']);b.rng.bit_generator.state=copy.deepcopy(d['rng'])
         return b
+
+    @classmethod
+    def import_legacy(cls, d, migration_key):
+        """Explicitly import schema 1. Storage owners provide a stable identity key."""
+        if d.get('schema') != 1:
+            raise ValueError('Seul le schema historique 1 peut etre importe explicitement')
+        if d.get('kind') != 'synthetic-risk06' or d.get('encoder') != ENCODER06:
+            raise ValueError('Format historique incompatible')
+        upgraded=copy.deepcopy(d)
+        upgraded['schema']=cls.SCHEMA
+        upgraded['brain_id']=str(uuid.uuid5(uuid.NAMESPACE_URL,'flytrade-legacy:'+str(migration_key)))
+        return cls.from_dict(upgraded)

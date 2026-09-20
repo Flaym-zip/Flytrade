@@ -56,7 +56,11 @@ class Run06:
             deployment=self.deployment,currency='EUR_PAPER_ONLY',price_currency='USD')
 
     def restore(self,d):
-        self.brain=Brain06.from_dict(d['brain']);self.calibrator=Calibrator.from_dict(d['calibrator'])
+        schema=d['brain'].get('schema')
+        key='live:'+str(self.data.absolute())+':'+str(d.get('generation',1))
+        self.brain=Brain06.from_dict(d['brain']) if schema==Brain06.SCHEMA else Brain06.import_legacy(d['brain'],key)
+        self.calibrator=Calibrator.from_dict(d['calibrator'])
+        if self.calibrator.n and self.calibrator.fingerprint!=self.brain.fingerprint():raise ValueError('Calibration incompatible avec les poids live')
         self.rules=Rules06(**d['settings']);self.stats=d['stats'];self.pending=d['pending']
         self.counter=d['counter'];self.generation=d['generation'];self.collect=d.get('collect',False)
         self.last=d.get('last');self.last_financial=d.get('last_financial');self.deployment=d.get('deployment')
@@ -122,12 +126,21 @@ class Run06:
             self.restore(before);raise ValueError('Duree de calcul trop longue : nouvelle cotation necessaire')
         self.counter+=1
         chosen=pol['chosen']
+        neural_action=('hausse','stable','baisse')[d.action]
+        economic_candidate=pol['candidates'][chosen] if chosen is not None else None
         rec=dict(schema06=1,id=self.counter,generation=self.generation,source=getattr(self.market,'source_id','coinbase-ETH-USD'),
             status='pending',epoch=self.market.epoch,placed=placed,start=start,end=start+5,deadline=start-10,
             reference=ref,base_row=row,history=list(history),history_end=math.floor(self.market.watermark),book=book,
             scores_before=d.scores.tolist(),probabilities=probs,quote_click=q,quotes=q,quote_lock=None,
             lock_due=placed+self.rules.execution_delay,locked_at=None,order_status='submitted' if chosen is not None else 'shadow',
             policy=pol,chosen=chosen,action=pol['action'],stake=pol['stake'],
+            brain_scores=d.scores.tolist(),brain_preferred_action=neural_action,
+            brain_tie_break={'used':bool(d.extra.get('tie_break')),'candidates':[('hausse','stable','baisse')[i] for i in d.extra.get('preferred_candidates',[d.action])],'selected':neural_action},
+            economic_action=pol['action'],economic_reason=pol['reason'],
+            multiplier=q['effective_gross'][chosen] if chosen is not None else None,
+            EV=economic_candidate['ev'] if economic_candidate else None,
+            risk_decision={'approved':chosen is not None,'risk_budget':pol['risk_budget'],'growth_lower':pol['growth_lower'],'ev_lower':economic_candidate['ev_lower'] if economic_candidate else None},
+            economic_stake=pol['stake'],
             target_row=row+(1,0,-1)[chosen] if chosen is not None else None,
             window_ticks=[],touches=[False]*3,observed=0,hit=False,net=None,
             settings=self.rules.model_dump(),brain_fingerprint=self.brain.fingerprint(),encoder=ENCODER06,

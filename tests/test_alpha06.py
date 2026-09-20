@@ -180,13 +180,15 @@ def test_training_shuffle_no_test_leakage_and_persistence(tmp_path):
     assert a.brain.fingerprint()==f
     before=a.position;a.close();a=Academy06(tmp_path);assert a.position==before and not a.auto;a.close()
 
-def test_recorded_quotes_only_for_financial_head(tmp_path):
+def test_economic_head_disabled_during_scientific_training(tmp_path):
     rr=list(rows(100));q=quotes06(rr[0]['history'],100.2,rr[0]['start'],rr[0]['placed']+2,200,Rules06(quote_mode='manual'))
     rr[0]['quote_lock']=q
     a=Academy06(tmp_path);report=a.import_lines(json.dumps(x) for x in rr)
     assert report['with_delayed_quotes']==1
+    with pytest.raises(Exception):Config06(epochs=1,mode='chronological',use_liquidity=False,economic_head=True)
     a.create(Config06(epochs=1,mode='chronological',use_liquidity=False))
-    a.step_batch(1);assert a.brain.value_updates==1;a.close()
+    assert a.config.economic_head is False
+    a.step_batch(1);assert a.brain.value_updates==0;a.close()
 
 def test_import_dedup_and_contradictions(tmp_path):
     a=Academy06(tmp_path);rr=list(rows(30));a.import_lines(json.dumps(r) for r in rr)

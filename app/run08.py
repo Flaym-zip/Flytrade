@@ -15,7 +15,8 @@ class Run08(Run06):
 
     def snapshot(self, now=None):
         d=super().snapshot(now);d['version']='0.8.0-alpha'
-        d['brain_id']=self.brain.fingerprint()[:12]
+        d['brain_id']=self.brain.brain_id
+        d['weight_fingerprint']=self.brain.fingerprint()
         d['brain_config']=dict(seed=self.brain.seed,n_kc=self.brain.n_kc,
             sparsity=self.brain.sparsity,use_liquidity=self.brain.use_liquidity)
         return d

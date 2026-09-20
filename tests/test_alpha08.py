@@ -19,6 +19,10 @@ CFG=Config06(n_kc=1024,epochs=1,mode='chronological',use_liquidity=False)
 def make(tmp_path,n=100):
     a=Academy08(tmp_path);a.import_lines(json.dumps(x) for x in rows(n));return a
 
+def weights(d):
+    """Weight identity, excluding brain_id: same params still get distinct permanent ids."""
+    d=copy.deepcopy(d);d.pop('brain_id',None);return d
+
 def finish(a):
     while a.position<len(a.plan):a.step_batch(40)
 
@@ -38,7 +42,8 @@ def test_initial_plan_and_numerical_updates_identical_to_alpha07(tmp_path,mode):
     old.create(cfg);new.create(cfg)
     assert old.plan==new.plan and old.splits==new.splits
     old.step_batch(20);new.step_batch(20)
-    assert old.brain.to_dict()==new.brain.to_dict()
+    assert old.brain.brain_id!=new.brain.brain_id
+    assert weights(old.brain.to_dict())==weights(new.brain.to_dict())
     old.close();new.close()
 
 def test_replay_reuses_exact_plan_and_reinitializes_weights(tmp_path):
@@ -46,7 +51,8 @@ def test_replay_reuses_exact_plan_and_reinitializes_weights(tmp_path):
     a.step_batch(8);assert a.brain.updates>0
     trained=a.brain.to_dict();a.replay()
     assert a.session!=session and a.plan==plan and a.position==0 and not a.auto
-    assert a.brain.to_dict()==initial and a.calibrator.n==0
+    assert a.brain.brain_id!=initial['brain_id']
+    assert weights(a.brain.to_dict())==weights(initial) and a.calibrator.n==0
     assert a.lineage['parent']==session and a.lineage['mode']=='replay'
     archive=a.archive(session);assert archive['brain']==trained and archive['position']==8
     a.close()
@@ -95,7 +101,7 @@ def test_reset_training_keeps_corpus_and_archives_all_weights(tmp_path):
     a=make(tmp_path);a.create(CFG);a.step_batch(3);b=copy.deepcopy(a.brain.to_dict());session=a.session
     cfg=CFG.model_copy(update={'n_kc':2048,'seed':100})
     a.reset_training(cfg)
-    assert a.brain.to_dict()==Brain06(n_kc=2048,seed=100,use_liquidity=False).to_dict()
+    assert weights(a.brain.to_dict())==weights(Brain06(n_kc=2048,seed=100,use_liquidity=False).to_dict())
     assert a.session is None and not a.plan and a.corpus_info()['windows']==100
     assert a.archive(session)['brain']==b;a.close()
 

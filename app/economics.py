@@ -129,4 +129,27 @@ class Calibrator:
     def to_dict(self):return dict(fingerprint=self.fingerprint,min_total=self.min_total,min_bin=self.min_bin,actions=self.actions,n=self.n)
     @classmethod
     def from_dict(cls,d):
-        c=cls(d['fingerprint'],d['min_total'],d['min_bin']);c.actions=d['actions'];c.n=d['n'];return c
+        if not isinstance(d,dict) or set(d)!={'fingerprint','min_total','min_bin','actions','n'}:
+            raise ValueError('Schema de calibration invalide')
+        fingerprint=d['fingerprint'];n=d['n'];actions=d['actions']
+        if type(n) is not int or n<0 or type(d['min_total']) is not int or d['min_total']<=0 or type(d['min_bin']) is not int or d['min_bin']<=0:
+            raise ValueError('Compteurs de calibration invalides')
+        if not isinstance(fingerprint,str) or (n and (len(fingerprint)!=64 or any(x not in '0123456789abcdef' for x in fingerprint))):
+            raise ValueError('Empreinte de calibration invalide')
+        if n==0 and fingerprint not in ('',):raise ValueError('Calibration vide avec empreinte inattendue')
+        if not isinstance(actions,list) or len(actions)!=3:raise ValueError('Trois groupes de calibration attendus')
+        clean=[]
+        for groups in actions:
+            if not isinstance(groups,list) or (n>0 and not groups) or (n==0 and groups):
+                raise ValueError('Groupes de calibration incoherents')
+            previous=None;total=0;out=[]
+            for g in groups:
+                if not isinstance(g,dict) or set(g)!={'min','max','n','hits'}:raise ValueError('Groupe de calibration invalide')
+                lo,hi=float(g['min']),float(g['max']);count,hits=g['n'],g['hits']
+                if not math.isfinite(lo) or not math.isfinite(hi) or lo>hi:raise ValueError('Bornes de calibration invalides')
+                if type(count) is not int or count<=0 or type(hits) is not int or not 0<=hits<=count:raise ValueError('Effectifs de calibration invalides')
+                if previous is not None and lo<previous:raise ValueError('Groupes de calibration non ordonnes')
+                previous=hi;total+=count;out.append({'min':lo,'max':hi,'n':count,'hits':hits})
+            if total!=n:raise ValueError('Total de calibration incoherent')
+            clean.append(out)
+        c=cls(fingerprint,d['min_total'],d['min_bin']);c.actions=clean;c.n=n;return c

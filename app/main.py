@@ -142,6 +142,11 @@ class Confirm(BaseModel):
     reset_brain:StrictBool=False
 class TrainingControl(BaseModel):
     action:str
+class DatasetVersionRequest(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    name:str=Field(min_length=1,max_length=120)
+    dataset_ids:list[str]=Field(min_length=1)
+    allow_exposed_training:StrictBool=False
 
 @app.post('/api/controls')
 async def controls(p:Controls,request:Request):
@@ -168,7 +173,7 @@ async def upload(request:Request):
                 f.write(part)
         async with request.app.state.train_lock:
             def load():
-                with open(name,'rb') as f:return request.app.state.academy.import_lines(f)
+                with open(name,'rb') as f:return request.app.state.academy.import_lines(f,name=request.query_params.get('name'))
             result=await asyncio.to_thread(load)
             request.app.state.train_snapshot=request.app.state.academy.snapshot()
             return result
@@ -176,8 +181,15 @@ async def upload(request:Request):
 @app.post('/api/training/collect')
 async def collect_import(request:Request):
     async with request.app.state.train_lock:
-        result=await asyncio.to_thread(request.app.state.academy.import_live,request.app.state.data/'flytrade06.sqlite3')
+        result=await asyncio.to_thread(request.app.state.academy.import_live,request.app.state.data/'flytrade06.sqlite3',request.query_params.get('name'))
         request.app.state.train_snapshot=request.app.state.academy.snapshot();return result
+@app.get('/api/datasets')
+async def datasets(request:Request):
+    async with request.app.state.train_lock:return request.app.state.academy.datasets()
+@app.post('/api/datasets/version')
+async def dataset_version(p:DatasetVersionRequest,request:Request):
+    async with request.app.state.train_lock:
+        return await asyncio.to_thread(request.app.state.academy.create_dataset_version,p.dataset_ids,p.name,p.allow_exposed_training)
 @app.post('/api/training/create')
 async def create(p:Config06,request:Request):
     async with request.app.state.train_lock:

@@ -161,7 +161,7 @@ def split_chronological(episodes: list[Episode]) -> tuple[dict[str, list[Episode
     data = sorted(episodes, key=lambda e: (e.placed, e.uid))
     n = len(data)
     if n < 15: raise ValueError('Au moins 15 fenetres valides pour un decoupage chronologique.')
-    a, b = int(n*.6), int(n*.8)
+    a, b = int(n*.70), int(n*.85)
     train, validation, test = data[:a], data[a:b], data[b:]
     val_cut = min(e.support_start for e in validation)
     test_cut = min(e.support_start for e in test)

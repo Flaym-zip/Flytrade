@@ -204,7 +204,7 @@ def test_runtime_namespaces_preserve_old_wallet_and_add_wiki(tmp_path,monkeypatc
     with TestClient(main.app) as c:
         state=c.get('/api/state').json();assert state['stats']['capital']==20 and state['market']['provider']=='kraken'
         assert c.get('/wiki').status_code==200
-        p=c.get('/api/wiki/parameters').json();assert sum(len(g['items']) for g in p['groups'])==29
+        p=c.get('/api/wiki/parameters').json();assert sum(len(g['items']) for g in p['groups'])==30
         assert c.get('/api/feed/diagnostics').json()['rest']['settlement_eligible'] is False
         assert 'default-src' in c.get('/wiki').headers['Content-Security-Policy']
     assert (tmp_path/'flytrade06.sqlite3').read_bytes()==before
