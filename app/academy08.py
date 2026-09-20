@@ -22,11 +22,11 @@ CAL = 'Calibration gelee'
 TEST = 'Test gele'
 
 class Academy08(Academy06):
-    def __init__(self, data, expected_source=None):
+    def __init__(self, data, expected_source=None, workshop_id=None):
         self.lineage = {'mode': 'initial', 'parent': None, 'initial_updates': 0}
         self.benchmark_id=str(uuid.uuid4())
         self._usage = None
-        super().__init__(data, expected_source)
+        super().__init__(data, expected_source, workshop_id)
         self.db.execute('CREATE TABLE IF NOT EXISTS exposed_test(uid TEXT PRIMARY KEY, session TEXT, dataset_id TEXT, benchmark_id TEXT, opened_at TEXT)')
         columns={r[1] for r in self.db.execute('PRAGMA table_info(exposed_test)')}
         for name in ('dataset_id','benchmark_id','opened_at'):
@@ -139,7 +139,7 @@ class Academy08(Academy06):
         try:
             with self.db:
                 self._archive_insert(old)
-                self.db.execute('INSERT OR REPLACE INTO state VALUES (1,?)',(canonical(self.checkpoint()),))
+                self.db.execute('INSERT OR REPLACE INTO workshop_state VALUES (?,?)',(self.workshop_id,canonical(self.checkpoint())))
         except Exception:
             self.restore(old);self.auto=False
             raise
@@ -203,6 +203,33 @@ class Academy08(Academy06):
         self._commit_new(old)
         return self.snapshot()
 
+    def initialize_brain(self, seed, n_kc, sparsity, use_liquidity):
+        """Mint the brain for a brand new workshop slot (Phase 1 'Cerveaux' registry).
+        Only valid before any training protocol exists on this slot."""
+        if self.session:raise ValueError('Ce cerveau a deja un protocole ; utiliser reset_training pour repartir de zero.')
+        self.brain=Brain06(seed=seed,n_kc=n_kc,sparsity=sparsity,use_liquidity=use_liquidity)
+        self.config=Config06(seed=seed,n_kc=n_kc,sparsity=sparsity,use_liquidity=use_liquidity)
+        self.lineage=dict(mode='initial',parent=None,initial_updates=0,created_at=stamp())
+        self.save()
+        return self.snapshot()
+
+    def clone_brain_from(self, source_brain):
+        """Fork independent weights (new permanent identity) for the 'Dupliquer' action.
+        The clone starts as a fresh workshop slot: no session, own future metrics."""
+        if self.session:raise ValueError('Impossible de dupliquer sur un atelier deja engage.')
+        d=source_brain.to_dict();d['brain_id']=str(uuid.uuid4())
+        self.brain=Brain06.from_dict(d)
+        self.config=Config06(seed=self.brain.seed,n_kc=self.brain.n_kc,
+                              sparsity=self.brain.sparsity,use_liquidity=self.brain.use_liquidity)
+        self.calibrator=Calibrator(min_total=60,min_bin=20)
+        self.lineage=dict(mode='duplicate',parent=None,initial_updates=self.brain.updates,created_at=stamp())
+        self.benchmark_id=str(uuid.uuid4())
+        self.session=None;self.plan=[];self.position=0;self.splits=None;self.split_report=None
+        self.test_opened=False;self.cal_scores=[];self.cal_labels=[];self.metrics={}
+        self.last=None;self.last_decision=None;self.error=None;self.auto=False
+        self.save()
+        return self.snapshot()
+
     def open_test(self):
         # The exposure log survives all resets/replays; outcomes themselves remain hidden until test.
         old=copy.deepcopy(self.checkpoint())
@@ -212,7 +239,7 @@ class Academy08(Academy06):
             self.plan.extend([TEST,uid] for uid in self.splits['test']);self.test_opened=True
             with self.db:
                 self._mark_seen(self.splits['test'],self.session,self.config.dataset_id,self.benchmark_id)
-                self.db.execute('INSERT OR REPLACE INTO state VALUES (1,?)',(canonical(self.checkpoint()),))
+                self.db.execute('INSERT OR REPLACE INTO workshop_state VALUES (?,?)',(self.workshop_id,canonical(self.checkpoint())))
         except Exception:
             self.restore(old);raise
 

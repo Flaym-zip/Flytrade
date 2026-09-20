@@ -68,14 +68,18 @@ def validate_row(row):
     return ep,dict(episode=ep.to_dict(),book=book,quote=quote)
 
 
+LEGACY_WORKSHOP_ID='legacy-atelier'
+
 class Academy06:
-    def __init__(self,data,expected_source=None):
+    def __init__(self,data,expected_source=None,workshop_id=None):
         self.expected_source=expected_source
+        self.workshop_id=workshop_id or LEGACY_WORKSHOP_ID
         self.db=sqlite3.connect(Path(data)/'flytrade-training06.sqlite3',check_same_thread=False)
         self.db.execute('PRAGMA journal_mode=WAL');self.db.execute('PRAGMA synchronous=FULL')
         self.db.executescript('''CREATE TABLE IF NOT EXISTS corpus(uid TEXT PRIMARY KEY,placed REAL,payload TEXT);
         CREATE INDEX IF NOT EXISTS corpus_placed ON corpus(placed);
         CREATE TABLE IF NOT EXISTS state(id INTEGER PRIMARY KEY,payload TEXT);
+        CREATE TABLE IF NOT EXISTS workshop_state(workshop_id TEXT PRIMARY KEY,payload TEXT);
         CREATE TABLE IF NOT EXISTS records(session TEXT,step INTEGER,phase TEXT,payload TEXT,PRIMARY KEY(session,step));
         CREATE TABLE IF NOT EXISTS archives(session TEXT PRIMARY KEY,payload TEXT);
         CREATE TABLE IF NOT EXISTS datasets(dataset_id TEXT PRIMARY KEY,name TEXT NOT NULL,source TEXT NOT NULL,
@@ -89,11 +93,22 @@ class Academy06:
         self.auto=False;self.error=None;self.test_opened=False;self.cal_scores=[];self.cal_labels=[]
         self.last=None;self.last_decision=None;self.metrics={};self.import_report=None
         self._migrate_legacy_datasets()
-        raw=self.db.execute('SELECT payload FROM state WHERE id=1').fetchone()
+        self._migrate_legacy_workshop_state()
+        raw=self.db.execute('SELECT payload FROM workshop_state WHERE workshop_id=?',(self.workshop_id,)).fetchone()
         if raw:
             original=json.loads(raw[0]);self.restore(original)
             if original.get('brain',{}).get('schema')!=Brain06.SCHEMA:self.save()
         self.auto=False
+
+    def _migrate_legacy_workshop_state(self):
+        # The historic single workshop lived in state(id=1). Copy it once into the
+        # new per-workshop table under LEGACY_WORKSHOP_ID; never touch or delete the old row.
+        if self.workshop_id!=LEGACY_WORKSHOP_ID:return
+        if self.db.execute('SELECT 1 FROM workshop_state WHERE workshop_id=?',(LEGACY_WORKSHOP_ID,)).fetchone():return
+        old=self.db.execute('SELECT payload FROM state WHERE id=1').fetchone()
+        if not old:return
+        with self.db:
+            self.db.execute('INSERT INTO workshop_state VALUES (?,?)',(LEGACY_WORKSHOP_ID,old[0]))
 
     def _migrate_legacy_datasets(self):
         if self.db.execute('SELECT COUNT(*) FROM datasets').fetchone()[0]:return
@@ -180,7 +195,7 @@ class Academy06:
         with self.db:
             for r in records:self.db.execute('INSERT INTO records VALUES (?,?,?,?)',
                 (self.session,r['step'],r['phase'],canonical(r)))
-            self.db.execute('INSERT OR REPLACE INTO state VALUES (1,?)',(canonical(self.checkpoint()),))
+            self.db.execute('INSERT OR REPLACE INTO workshop_state VALUES (?,?)',(self.workshop_id,canonical(self.checkpoint())))
 
     def import_lines(self,lines,origin='upload',name=None):
         if self.auto:raise ValueError('Mettre l\'apprentissage en pause avant import')

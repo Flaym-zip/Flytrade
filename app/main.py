@@ -14,6 +14,7 @@ from .orderbook import OrderBook,stream_book
 from .run08 import Run08 as Run06
 from .economy06 import Rules06
 from .academy08 import Academy08 as Academy06, Config06
+from .brains import BrainRegistry
 from .feed07 import KrakenMarket, KrakenBook, stream_kraken, stream_kraken_book, poll_rest
 from .wiki07 import wiki_parameters
 
@@ -31,7 +32,9 @@ async def lifespan(app):
     app.state.market=KrakenMarket() if provider=='kraken' else Market()
     app.state.book=KrakenBook() if provider=='kraken' else OrderBook()
     app.state.run=Run06(data,app.state.market,app.state.book)
-    app.state.academy=Academy06(data,expected_source=(provider+'-ETH-USD') if provider!='off' else None)
+    expected_source=(provider+'-ETH-USD') if provider!='off' else None
+    app.state.academy=Academy06(data,expected_source=expected_source)
+    app.state.brains=BrainRegistry(data,expected_source=expected_source)
     app.state.lock=asyncio.Lock();app.state.train_lock=asyncio.Lock()
     app.state.train_snapshot=app.state.academy.snapshot()
     async def clock():
@@ -120,6 +123,8 @@ async def training_page():return FileResponse(STATIC/'index06.html')
 async def guide_page():return FileResponse(STATIC/'index06.html')
 @app.get('/wiki')
 async def wiki_page():return FileResponse(STATIC/'wiki08.html')
+@app.get('/brains')
+async def brains_page():return FileResponse(STATIC/'brains.html')
 @app.get('/api/wiki/parameters')
 async def parameters():return wiki_parameters()
 @app.get('/api/feed/diagnostics')
@@ -147,6 +152,16 @@ class DatasetVersionRequest(BaseModel):
     name:str=Field(min_length=1,max_length=120)
     dataset_ids:list[str]=Field(min_length=1)
     allow_exposed_training:StrictBool=False
+class BrainCreateRequest(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    name:str=Field(min_length=1,max_length=80)
+    n_kc:Literal[1024,2048]=2048
+    seed:int=Field(default=42,ge=0,le=2147483647)
+    sparsity:float=Field(default=.05,ge=.01,le=.5)
+    use_liquidity:StrictBool=True
+class BrainDuplicateRequest(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    name:str=Field(min_length=1,max_length=80)
 
 @app.post('/api/controls')
 async def controls(p:Controls,request:Request):
@@ -190,6 +205,25 @@ async def datasets(request:Request):
 async def dataset_version(p:DatasetVersionRequest,request:Request):
     async with request.app.state.train_lock:
         return await asyncio.to_thread(request.app.state.academy.create_dataset_version,p.dataset_ids,p.name,p.allow_exposed_training)
+@app.get('/api/brains')
+async def brains_list(request:Request):
+    async with request.app.state.train_lock:
+        live=request.app.state.run.brain.brain_id
+        return await asyncio.to_thread(request.app.state.brains.list,live,request.app.state.academy)
+@app.post('/api/brains')
+async def brains_create(p:BrainCreateRequest,request:Request):
+    async with request.app.state.train_lock:
+        return await asyncio.to_thread(request.app.state.brains.create,p.name,p.n_kc,p.seed,p.sparsity,p.use_liquidity)
+@app.post('/api/brains/{workshop_id}/duplicate')
+async def brains_duplicate(workshop_id:str,p:BrainDuplicateRequest,request:Request):
+    async with request.app.state.train_lock:
+        return await asyncio.to_thread(request.app.state.brains.duplicate,workshop_id,p.name)
+@app.post('/api/brains/{workshop_id}/archive')
+async def brains_archive(workshop_id:str,request:Request):
+    async with request.app.state.train_lock:
+        await asyncio.to_thread(request.app.state.brains.archive,workshop_id)
+        live=request.app.state.run.brain.brain_id
+        return await asyncio.to_thread(request.app.state.brains.get,workshop_id,live,request.app.state.academy)
 @app.post('/api/training/create')
 async def create(p:Config06,request:Request):
     async with request.app.state.train_lock:

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>Flytrade | Cerveaux</title>
+<link href="/static/style06.css" rel="stylesheet"/>
+<link href="/static/clarity08.css" rel="stylesheet"/>
+<style>
+.brains-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;padding:0 24px 24px}
+.brain-card{background:var(--card);border:1px solid var(--border);border-radius:11px;padding:16px;display:flex;flex-direction:column;gap:8px}
+.brain-card h3{margin:0;font-size:16px}
+.brain-card .row{gap:8px}
+.state-badge{font-size:11px;padding:3px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.04em}
+.state-neuf{background:#1d2d3c;color:var(--muted)}
+.state-entrainement{background:#2a2314;color:#d9bd82}
+.state-entraine{background:#153e34;color:#c2ffea}
+.state-teste{background:#15332F;color:#6FE3C4}
+.state-deploye{background:#132d4a;color:#8fc4ff}
+.state-archive{background:#2a1c22;color:#f2617a}
+.brain-card dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:12px;color:var(--muted);margin:4px 0}
+.brain-card dl dt{color:var(--muted)}.brain-card dl dd{margin:0;color:var(--text);text-align:right;font-family:ui-monospace,monospace}
+.brain-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto;padding-top:8px}
+.brain-actions button{font-size:12px;padding:7px 10px}
+.legacy-tag{font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:5px;padding:2px 6px}
+.top-row{padding:18px 24px 4px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.top-row p{margin:0;color:var(--muted);font-size:13px;max-width:640px}
+#empty-note{margin:0 24px 24px;color:var(--muted)}
+#toast{position:fixed;bottom:20px;left:20px;max-width:490px;background:#163A30;color:#D1F8EB;border:1px solid var(--teal);padding:14px 18px;border-radius:8px;z-index:100;font-size:14px}
+</style>
+</head><body>
+<header><div class="brand"><b>Flytrade</b><span>ALPHA 08 / LABORATOIRE GUIDÉ</span></div>
+<nav><a class="button" href="/">Marché &amp; portefeuille</a><a class="button" href="/training">Collecte &amp; apprentissage</a><button class="selected" id="tab-brains">Cerveaux</button><a class="button wiki-tab" href="/wiki">Wiki</a></nav>
+</header>
+<div class="notice">SIMULATION UNIQUEMENT — les actions Entraîner / Tester / Déployer listées ici seront reliées à l'atelier et au marché existants dans une prochaine étape. Créer, nommer, dupliquer et archiver un cerveau fonctionne déjà pleinement.</div>
+<div hidden id="error" role="alert"></div>
+<div class="top-row">
+<div><h1 style="margin:0 0 6px">Cerveaux</h1><p>Chaque cerveau a une identité permanente (<code>brain_id</code>) distincte de l'identité de ses poids (<code>weight_fingerprint</code>). Deux cerveaux créés avec les mêmes réglages restent deux cerveaux différents.</p></div>
+<button id="open-create">+ Nouveau cerveau</button>
+</div>
+<div id="empty-note" hidden>Aucun cerveau pour le moment.</div>
+<div class="brains-grid" id="grid"></div>
+
+<dialog id="create-dialog"><form id="create-form" method="dialog">
+<div class="eyebrow">NOUVEAU CERVEAU</div><h2>Créer un cerveau indépendant</h2>
+<div class="form-grid" style="grid-template-columns:1fr">
+<label>Nom<input autofocus maxlength="80" name="name" placeholder="Ex. Alpha, Essai Kraken 1..." required type="text"/></label>
+<label>Architecture<input disabled type="text" value="Standard Flytrade"/></label>
+</div>
+<div class="form-grid">
+<label>KC synthétiques<select name="n_kc"><option>1024</option><option selected>2048</option></select></label>
+<label>Graine<input min="0" name="seed" type="number" value="42"/></label>
+</div>
+<details id="advanced-create"><summary>Paramètres avancés</summary>
+<div class="form-grid">
+<label>Activité KC<select name="sparsity"><option value=".02">2 %</option><option selected value=".05">5 %</option><option value=".1">10 %</option><option value=".2">20 %</option></select></label>
+<label class="check"><input checked name="use_liquidity" type="checkbox"/>Capteurs de liquidité</label>
+</div>
+</details>
+<div class="row wrap"><button class="subtle" id="create-cancel" type="button">Annuler</button><button type="submit">Créer ce cerveau</button></div>
+</form></dialog>
+
+<dialog id="duplicate-dialog"><form id="duplicate-form" method="dialog">
+<div class="eyebrow">DUPLIQUER</div><h2>Nom du nouveau cerveau</h2>
+<p class="muted small">Les poids actuels sont copiés tels quels. Une nouvelle identité permanente est attribuée ; l'apprentissage futur des deux cerveaux reste indépendant.</p>
+<label>Nom<input autofocus maxlength="80" name="name" required type="text"/></label>
+<div class="row wrap"><button class="subtle" id="duplicate-cancel" type="button">Annuler</button><button type="submit">Dupliquer</button></div>
+</form></dialog>
+
+<dialog id="archive-dialog"><form id="archive-form" method="dialog">
+<div class="eyebrow">VÉRIFIER AVANT DE CONTINUER</div><h2>Archiver ce cerveau ?</h2>
+<p>Ses poids, sa calibration et son historique restent conservés sur le disque. Il disparaît seulement des cerveaux actifs.</p>
+<div class="row wrap"><button class="subtle" id="archive-cancel" type="button" value="cancel">Annuler</button><button id="archive-confirm" type="submit">Archiver</button></div>
+</form></dialog>
+
+<div hidden id="toast" role="status"></div>
+<script defer src="/static/brains.js"></script>
+</body></html>

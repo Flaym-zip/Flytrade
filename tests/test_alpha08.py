@@ -107,7 +107,7 @@ def test_reset_training_keeps_corpus_and_archives_all_weights(tmp_path):
 
 def test_failed_lifecycle_write_rolls_back_runtime(tmp_path):
     a=make(tmp_path);a.create(CFG);a.step_batch(4);before=a.checkpoint()
-    a.db.execute("CREATE TRIGGER fail_reset BEFORE INSERT ON state BEGIN SELECT RAISE(ABORT,'test failure'); END")
+    a.db.execute("CREATE TRIGGER fail_reset BEFORE INSERT ON workshop_state BEGIN SELECT RAISE(ABORT,'test failure'); END")
     with pytest.raises(sqlite3.IntegrityError):a.reset_training(CFG)
     assert a.checkpoint()==before
     a.db.execute('DROP TRIGGER fail_reset');a.close()
