@@ -4,3 +4,18 @@ data/
 __pycache__/
 .pytest_cache/
 *.pyc
+
+# Donnees experimentales locales
+baselines/
+diagnostic-*.json
+audit-*.json
+
+# Resultats/rapports generes
+docs/validation-*.json
+docs/validation-*.txt
+
+# Donnees runtime
+*.db
+*.sqlite
+*.sqlite3
+*.log
