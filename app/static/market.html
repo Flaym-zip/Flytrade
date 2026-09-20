@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>Flytrade | Marché</title>
+<link href="/static/style06.css" rel="stylesheet"/>
+<link href="/static/clarity08.css" rel="stylesheet"/>
+<style>
+.market{max-width:980px;margin:0 auto;padding:0 24px 40px}
+.deployed-header{border:1px solid var(--border);border-radius:10px;background:var(--card);padding:14px 18px;margin:14px 24px;display:flex;flex-wrap:wrap;gap:18px;align-items:center}
+.deployed-header b{color:var(--teal)}
+.deployed-header code{font-size:12px}
+.bloc{border:1px solid var(--border);border-radius:11px;padding:18px;margin-bottom:16px}
+.bloc h2{display:flex;align-items:center;gap:8px}
+.bloc-brain{border-left:3px solid var(--teal)}
+.bloc-econ{border-left:3px solid var(--purple)}
+.hsb-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}
+.hsb-cell{border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center}
+.hsb-cell.preferred{border-color:var(--teal);background:#0f2420}
+.hsb-cell label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px}
+.hsb-cell .score{font:20px ui-monospace,monospace}
+.hsb-cell .prob{font-size:12px;color:var(--muted)}
+.preference-line{font-size:16px;margin:10px 0}
+.preference-line b{color:var(--teal)}
+.tie-note{font-size:12px;color:var(--muted)}
+.econ-table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0}
+.econ-table th,.econ-table td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--border)}
+.econ-table th:first-child,.econ-table td:first-child{text-align:left}
+.decision-line{font-size:18px;margin:14px 0 6px}
+.decision-line.trade b{color:var(--teal)}
+.decision-line.wait b{color:#d9bd82}
+.wait-reason{font-size:14px;color:var(--muted)}
+.history-table{width:100%;border-collapse:collapse;font-size:12px}
+.history-table th,.history-table td{padding:7px 8px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+.result-pill{font-size:11px;padding:2px 8px;border-radius:20px;background:#1d2d3c;color:var(--muted)}
+.result-pill.won{background:#153e34;color:#c2ffea}
+.result-pill.lost{background:#2a1c22;color:#f2617a}
+#toast{position:fixed;bottom:20px;left:20px;max-width:490px;background:#163A30;color:#D1F8EB;border:1px solid var(--teal);padding:14px 18px;border-radius:8px;z-index:100;font-size:14px}
+</style>
+</head><body>
+<header><div class="brand"><b>Flytrade</b><span>ALPHA 08 / LABORATOIRE GUIDÉ</span></div>
+<nav><button class="selected" id="tab-market">Marché</button><a class="button" href="/brains">Cerveaux</a><a class="button" href="/entrainement">Entraînement</a><a class="button wiki-tab" href="/wiki">Wiki</a></nav>
+<div class="pill" id="connection">Connexion...</div>
+</header>
+<div class="notice">SIMULATION UNIQUEMENT — cotations synthétiques ou hypothèses manuelles, jamais les offres Euphoria. Portefeuille EUR fictif. Aucun ordre réel. Parcours technique complet (graphique, capteurs de liquidité, réglages fins) : <a href="/training">Actions avancées</a>.</div>
+<div hidden id="error" role="alert"></div>
+
+<div class="deployed-header" id="deployed-header">
+<span>Cerveau déployé : <b id="dep-name">Chargement...</b></span>
+<span><code id="dep-brain-id"></code></span>
+<span>Dataset : <b id="dep-dataset">—</b></span>
+<span><code id="dep-fingerprint"></code></span>
+</div>
+
+<div class="market">
+
+<div class="card">
+<div class="row wrap">
+<button id="collect-on">Démarrer collecte</button><button class="subtle" id="collect-off">Arrêter collecte</button>
+<button id="policy-on">Activer la politique</button><button class="subtle" id="policy-off">Pause politique</button>
+<span class="pill" id="modes">Collecte arrêtée</span>
+</div>
+<div class="row wrap" style="margin-top:10px">
+<span>Portefeuille : <b id="capital">20,00 €</b></span>
+<span>Résultat net : <b id="pnl">+0,00 €</b></span>
+</div>
+</div>
+
+<section class="card bloc bloc-brain">
+<h2>Ce que le cerveau pense</h2>
+<div class="hsb-row" id="hsb-row"></div>
+<div class="preference-line">PRÉFÉRENCE DU CERVEAU : <b id="brain-preference">—</b></div>
+<div class="tie-note" id="tie-note" hidden></div>
+<p class="plain-help">Le cerveau ne choisit jamais ATTENDRE : il désigne toujours HAUSSE, STABLE ou BAISSE. La décision d'agir ou non vient uniquement du moteur économique, ci-dessous.</p>
+</section>
+
+<section class="card bloc bloc-econ">
+<h2>Ce que le moteur économique décide</h2>
+<table class="econ-table" id="econ-table">
+<thead><tr><th>Case</th><th>Probabilité calibrée</th><th>Multiplicateur</th><th>EV</th><th>EV prudente</th></tr></thead>
+<tbody></tbody>
+</table>
+<div class="decision-line" id="decision-line">DÉCISION ÉCONOMIQUE : <b id="decision-value">—</b></div>
+<div id="decision-detail"></div>
+</section>
+
+<section class="card">
+<h2>Historique des décisions</h2>
+<div class="table-scroll"><table class="history-table" id="history-table">
+<thead><tr><th>Heure</th><th>Cerveau</th><th>Économie</th><th>Raison / mise</th><th>Résultat</th></tr></thead>
+<tbody></tbody>
+</table></div>
+</section>
+
+<details class="card" id="details-card">
+<summary>Détails techniques</summary>
+<div class="metrics" id="tech-metrics"></div>
+<p class="muted small" id="tech-note"></p>
+</details>
+
+</div>
+<div hidden id="toast" role="status"></div>
+<script defer src="/static/market.js"></script>
+</body></html>

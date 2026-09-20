@@ -118,7 +118,7 @@ async def bad_value(request,exc):return JSONResponse({'detail':str(exc)},status_
 async def health(request:Request):
     return {'ok':not request.app.state.run.fatal,'version':'0.8.0-alpha','connected':request.app.state.market.connected}
 @app.get('/')
-async def index():return FileResponse(STATIC/'index06.html')
+async def index():return FileResponse(STATIC/'market.html')
 @app.get('/training')
 async def training_page():return FileResponse(STATIC/'index06.html')
 @app.get('/guide')
