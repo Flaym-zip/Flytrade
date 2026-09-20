@@ -1,0 +1,41 @@
+name: flytrade
+services:
+  lab:
+    build: .
+    ports:
+      - "127.0.0.1:${FLYTRADE_PORT:-8088}:8000"
+    volumes:
+      - memory:/app/data
+    environment:
+      FLYTRADE_DATA: /app/data
+      FLYTRADE_FEED: ${FLYTRADE_FEED:-kraken}
+      FLYTRADE_BOOK: ${FLYTRADE_BOOK:-on}
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3))['ok']"]
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+volumes:
+  memory:
+    name: ${FLYTRADE_VOLUME:-flytrade-memory}
+    external: ${FLYTRADE_VOLUME_EXTERNAL:-false}

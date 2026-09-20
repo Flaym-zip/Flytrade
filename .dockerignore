@@ -1,0 +1,15 @@
+.git
+.venv
+.env
+__pycache__
+.pytest_cache
+*.pyc
+data
+screenshots
+tests
+*.zip
+
+baselines
+_archives
+*.jsonl
+*.csv

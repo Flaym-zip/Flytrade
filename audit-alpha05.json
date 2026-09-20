@@ -1,0 +1,378 @@
+{
+  "source_sha256": {
+    "flytrade-alpha05-observations.jsonl": "19ab21a5c1e0fe87f158fb25447e824838941b26dc4497f2f94ef324542bb223",
+    "flytrade-alpha05-live.json": "b893a634091c5d6fa3f242a0d046a684d11ff67370101d31c5b5c047f5208b42"
+  },
+  "observations_all": 199,
+  "all_status": {
+    "observed": 149,
+    "void": 32,
+    "lost": 14,
+    "won": 4
+  },
+  "generations": {
+    "1": 16,
+    "2": 183
+  },
+  "checkpoint_generation": 2,
+  "generation_completed": 183,
+  "checkpoint_pending": 2,
+  "status_current": {
+    "observed": 136,
+    "void": 29,
+    "lost": 14,
+    "won": 4
+  },
+  "funded_completed": 18,
+  "wins": 4,
+  "losses": 14,
+  "net_units_alpha05": 161.63473846153846,
+  "starting_units_alpha05": 100.0,
+  "arithmetic_issues": [],
+  "quote_sources": {
+    "manual_hypothesis": 6,
+    "synthetic_brownian_issuer_NOT_EUPHORIA": 177
+  },
+  "trades": [
+    {
+      "id": 23,
+      "action": "baisse",
+      "status": "lost",
+      "gross": 14.01818181818182,
+      "effective_gross": 13.878000000000002,
+      "stake": 1.0,
+      "net": -1.0,
+      "p": {
+        "p": 0.275,
+        "lower": 0.1610785343314309,
+        "n": 40,
+        "ready": true
+      },
+      "asof": 1789846359.957304,
+      "start": 1789846370.0,
+      "end": 1789846375.0
+    },
+    {
+      "id": 32,
+      "action": "baisse",
+      "status": "won",
+      "gross": 35.58461538461538,
+      "effective_gross": 35.22876923076923,
+      "stake": 1.0,
+      "net": 34.22876923076923,
+      "p": {
+        "p": 0.275,
+        "lower": 0.1610785343314309,
+        "n": 40,
+        "ready": true
+      },
+      "asof": 1789846445.1360176,
+      "start": 1789846460.0,
+      "end": 1789846465.0
+    },
+    {
+      "id": 42,
+      "action": "hausse",
+      "status": "lost",
+      "gross": 4.49126213592233,
+      "effective_gross": 4.4463495145631065,
+      "stake": 1.0,
+      "net": -1.0,
+      "p": {
+        "p": 0.5,
+        "lower": 0.2992949144298199,
+        "n": 20,
+        "ready": true
+      },
+      "asof": 1789846540.0865502,
+      "start": 1789846555.0,
+      "end": 1789846560.0
+    },
+    {
+      "id": 53,
+      "action": "baisse",
+      "status": "lost",
+      "gross": 11.861538461538462,
+      "effective_gross": 11.742923076923077,
+      "stake": 1.0,
+      "net": -1.0,
+      "p": {
+        "p": 0.275,
+        "lower": 0.1610785343314309,
+        "n": 40,
+        "ready": true
+      },
+      "asof": 1789846645.1226702,
+      "start": 1789846660.0,
+      "end": 1789846665.0
+    },
+    {
+      "id": 77,
+      "action": "baisse",
+      "status": "lost",
+      "gross": 66.08571428571429,
+      "effective_gross": 65.42485714285715,
+      "stake": 1.0,
+      "net": -1.0,
+      "p": {
+        "p": 0.275,
+        "lower": 0.1610785343314309,
+        "n": 40,
+        "ready": true
+      },
+      "asof": 1789846870.110541,
+      "start": 1789846885.0,
+      "end": 1789846890.0
+    },
+    {
+      "id": 84,
+      "action": "hausse",
+      "status": "lost",
+      "gross": 3.8873949579831932,
+      "effective_gross": 3.8485210084033614,
+      "stake": 1.0,
+      "net": -1.0,
+      "p": {
+        "p": 0.5,
+        "lower": 0.2992949144298199,
+        "n": 20,
+        "ready": true
+      },
+      "asof": 1789846935.1161616,
+      "start": 1789846950.0,
+      "end": 1789846955.0
+    },
+    {
+      "id": 117,
+      "action": "baisse",
+      "status": "lost",
+      "gross": 100.0,
+      "effective_gross": 99.0,
+      "stake": 1.0,
+      "net": -1.0,
+      "p": {
+        "p": 0.275,
+        "lower": 0.1610785343314309,
+        "n": 40,
+        "ready": true
+      },
+      "asof": 1789847250.4463644,
+      "start": 1789847265.0,
+      "end": 1789847270.0
+    },
+    {
+      "id": 124,
+      "action": "baisse",
+      "status": "lost",
+      "gross": 13.217142857142859,
+      "effective_gross": 13.08497142857143,
+      "stake": 1.0,
+      "net": -1.0,
+      "p": {
+        "p": 0.275,
+        "lower": 0.1610785343314309,
+        "n": 40,
+        "ready": true
+      },
+      "asof": 1789847315.1995084,
+      "start": 1789847330.0,
+      "end": 1789847335.0
+    },
+    {
+      "id": 136,
+      "action": "baisse",
+      "status": "lost",
+      "gross": 100.0,
+      "effective_gross": 99.0,
+      "stake": 1.0,
+      "net": -1.0,
+      "p": {
+        "p": 0.275,
+        "lower": 0.1610785343314309,
+        "n": 40,
+        "ready": true
+      },
+      "asof": 1789847435.3061242,
+      "start": 1789847450.0,
+      "end": 1789847455.0
+    },
+    {
+      "id": 139,
+      "action": "baisse",
+      "status": "lost",
+      "gross": 14.92258064516129,
+      "effective_gross": 14.773354838709677,
+      "stake": 1.0,
+      "net": -1.0,
+      "p": {
+        "p": 0.275,
+        "lower": 0.1610785343314309,
+        "n": 40,
+        "ready": true
+      },
+      "asof": 1789847465.0703628,
+      "start": 1789847480.0,
+      "end": 1789847485.0
+    },
+    {
+      "id": 144,
+      "action": "baisse",
+      "status": "lost",
+      "gross": 8.410909090909092,
+      "effective_gross": 8.3268,
+      "stake": 1.0,
+      "net": -1.0,
+      "p": {
+        "p": 0.275,
+        "lower": 0.1610785343314309,
+        "n": 40,
+        "ready": true
+      },
+      "asof": 1789847511.211499,
+      "start": 1789847525.0,
+      "end": 1789847530.0
+    },
+    {
+      "id": 155,
+      "action": "baisse",
+      "status": "lost",
+      "gross": 30.84,
+      "effective_gross": 30.5316,
+      "stake": 1.0,
+      "net": -1.0,
+      "p": {
+        "p": 0.275,
+        "lower": 0.1610785343314309,
+        "n": 40,
+        "ready": true
+      },
+      "asof": 1789847625.4739187,
+      "start": 1789847640.0,
+      "end": 1789847645.0
+    },
+    {
+      "id": 164,
+      "action": "baisse",
+      "status": "lost",
+      "gross": 10.280000000000001,
+      "effective_gross": 10.177200000000001,
+      "stake": 1.0,
+      "net": -1.0,
+      "p": {
+        "p": 0.275,
+        "lower": 0.1610785343314309,
+        "n": 40,
+        "ready": true
+      },
+      "asof": 1789847710.964131,
+      "start": 1789847725.0,
+      "end": 1789847730.0
+    },
+    {
+      "id": 173,
+      "action": "baisse",
+      "status": "won",
+      "gross": 35.58461538461538,
+      "effective_gross": 35.22876923076923,
+      "stake": 1.0,
+      "net": 34.22876923076923,
+      "p": {
+        "p": 0.275,
+        "lower": 0.1610785343314309,
+        "n": 40,
+        "ready": true
+      },
+      "asof": 1789847800.133644,
+      "start": 1789847815.0,
+      "end": 1789847820.0
+    },
+    {
+      "id": 179,
+      "action": "baisse",
+      "status": "won",
+      "gross": 10.280000000000001,
+      "effective_gross": 10.177200000000001,
+      "stake": 1.0,
+      "net": 9.177200000000001,
+      "p": {
+        "p": 0.275,
+        "lower": 0.1610785343314309,
+        "n": 40,
+        "ready": true
+      },
+      "asof": 1789847860.1885235,
+      "start": 1789847875.0,
+      "end": 1789847880.0
+    },
+    {
+      "id": 185,
+      "action": "baisse",
+      "status": "won",
+      "gross": 100.0,
+      "effective_gross": 99.0,
+      "stake": 1.0,
+      "net": 98.0,
+      "p": {
+        "p": 0.275,
+        "lower": 0.1610785343314309,
+        "n": 40,
+        "ready": true
+      },
+      "asof": 1789847915.1744916,
+      "start": 1789847930.0,
+      "end": 1789847935.0
+    },
+    {
+      "id": 189,
+      "action": "hausse",
+      "status": "lost",
+      "gross": 14.01818181818182,
+      "effective_gross": 13.878000000000002,
+      "stake": 1.0,
+      "net": -1.0,
+      "p": {
+        "p": 0.3,
+        "lower": 0.10778928748621182,
+        "n": 10,
+        "ready": true
+      },
+      "asof": 1789847956.6827505,
+      "start": 1789847970.0,
+      "end": 1789847975.0
+    },
+    {
+      "id": 192,
+      "action": "hausse",
+      "status": "lost",
+      "gross": 3.7609756097560973,
+      "effective_gross": 3.7233658536585366,
+      "stake": 1.0,
+      "net": -1.0,
+      "p": {
+        "p": 0.5,
+        "lower": 0.2992949144298199,
+        "n": 20,
+        "ready": true
+      },
+      "asof": 1789847980.0978417,
+      "start": 1789847995.0,
+      "end": 1789848000.0
+    }
+  ],
+  "sensitivity_NOT_a_corrected_replay": {
+    "5": 1.8000000000000007,
+    "10": 21.6,
+    "20": 51.577200000000005,
+    "50": 112.13473846153846,
+    "100": 161.63473846153846
+  },
+  "calibration_n": 40,
+  "model_updates": 120,
+  "uses_orderbook": false,
+  "limitations": [
+    "Displayed multipliers are SYNTHETIC, not Euphoria quotes.",
+    "No recorded execution delay or fill quotes: cannot reconstruct historical delayed executions.",
+    "Sensitivity fixes the same actions and outcomes; not a rerun of the policy.",
+    "Forty calibration windows; not a guarantee of conditional probabilities under extreme synthetic payouts."
+  ]
+}

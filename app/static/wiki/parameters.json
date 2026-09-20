@@ -1,0 +1,419 @@
+{
+  "version": "0.8.0-alpha",
+  "code_sha256": "616735b3afa226693aa6f71d30b88d08ae77726f3ded37b670722dd855f64c54",
+  "groups": [
+    {
+      "name": "Entrainement",
+      "source": "app/academy06.py",
+      "items": [
+        {
+          "key": "seed",
+          "title": "Graine",
+          "unit": "Sans unite",
+          "default": 42,
+          "limits": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "description": "Fixe la projection PN vers KC, les sous-ensembles equilibres et les tirages. Changer de graine recree un autre reseau. Ne pas choisir apres coup uniquement la graine gagnante.",
+          "caution": "Nouveau protocole vierge."
+        },
+        {
+          "key": "n_kc",
+          "title": "Nombre de Kenyon cells",
+          "unit": "Unites synthetiques",
+          "default": 2048,
+          "limits": {
+            "enum": [
+              1024,
+              2048
+            ],
+            "type": "integer"
+          },
+          "description": "1024 ou 2048, pas des cellules MaleCNS. Doubler augmente la capacite et le cout CPU, pas la quantite de donnees. Les poids de dimensions differentes ne sont pas convertis automatiquement.",
+          "caution": "Nouveau reseau et nouvelle calibration."
+        },
+        {
+          "key": "mode",
+          "title": "Parcours",
+          "unit": "Categorie",
+          "default": "curriculum",
+          "limits": {
+            "enum": [
+              "curriculum",
+              "balanced",
+              "chronological"
+            ],
+            "type": "string"
+          },
+          "description": "curriculum = A exclusifs equilibres puis B ambigus puis C naturel; balanced = A seulement; chronological = tout TRAIN a chaque passage. CAL et TEST restent naturels.",
+          "caution": "Recreer le protocole, conserver le meme decoupage pour comparer."
+        },
+        {
+          "key": "epochs",
+          "title": "Passages",
+          "unit": "Nombre",
+          "default": 5,
+          "limits": {
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "description": "Repetitions de A dans curriculum/balanced, repetitions de tout TRAIN dans chronological. B et C n'ont qu'un passage en curriculum. Repeter ne cree pas de nouvelles observations.",
+          "caution": "Surveiller la memorisation et le cout CPU."
+        },
+        {
+          "key": "shuffle_train",
+          "title": "Melanger TRAIN",
+          "unit": "Booleen",
+          "default": false,
+          "limits": {
+            "type": "boolean"
+          },
+          "description": "Permute seulement les exemples a l'interieur des phases TRAIN apres separation chronologique. Le melange casse leur succession temporelle; ne pas l'utiliser pour pretendre mesurer une adaptation a un regime en ligne.",
+          "caution": "Graine et permutation reproductibles; CAL/TEST inchanges."
+        },
+        {
+          "key": "signal",
+          "title": "Retour apres resultat",
+          "unit": "all / chosen",
+          "default": "all",
+          "limits": {
+            "enum": [
+              "all",
+              "chosen"
+            ],
+            "type": "string"
+          },
+          "description": "all : les trois issues observees apres fermeture modifient les poids, via moyenne de trois mises a jour calculees depuis le meme etat. chosen : seule la decision faite recoit +1/-1. Aucune issue n'est visible avant le choix.",
+          "caution": "All apprend plus de chaque fenetre mais change le protocole scientifique."
+        },
+        {
+          "key": "learning_rate",
+          "title": "Vitesse d'apprentissage",
+          "unit": "Sans unite",
+          "default": 0.25,
+          "limits": {
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "type": "number"
+          },
+          "description": "Multiplie chaque correction KC-MBON. Un taux eleve accelere l'ajustement mais peut faire osciller ou saturer les poids. Ce n'est ni la vitesse du marche ni celle de l'animation.",
+          "caution": "Tester quelques valeurs sur un jeu de developpement; ne pas optimiser sur TEST."
+        },
+        {
+          "key": "epsilon",
+          "title": "Exploration TRAIN",
+          "unit": "Fraction",
+          "default": 0.15,
+          "limits": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "description": "Probabilite de choisir au hasard une des trois cases plutot que le meilleur score. En mode all, change surtout le choix affiche, pas les trois cibles apprises. CAL, TEST et politique live sont sans exploration volontaire.",
+          "caution": "0.15 = 15 %, pas 0.15 %."
+        },
+        {
+          "key": "sparsity",
+          "title": "Fraction de KC active",
+          "unit": "Fraction",
+          "default": 0.05,
+          "limits": {
+            "maximum": 0.5,
+            "minimum": 0.01,
+            "type": "number"
+          },
+          "description": "Le seuil APL est le quantile 1-sparsity des excitations par candidat. 0.05 laisse environ 5 % actives; le nombre exact depend des egalites et du seuil numerique. Plus n'est pas necessairement mieux.",
+          "caution": "Modifie les representations : nouveau protocole et calibration."
+        },
+        {
+          "key": "use_liquidity",
+          "title": "Capteurs de liquidite",
+          "unit": "Booleen",
+          "default": true,
+          "limits": {
+            "type": "boolean"
+          },
+          "description": "Ajoute les caracteristiques du carnet et du flux aux projections. Les lignes sans carnet valide sont exclues du protocole quand cette option est active. Le compteur general du corpus peut donc depasser l'effectif utilisable.",
+          "caution": "Ne jamais remplir un carnet manquant par un carnet futur ou neutre invente."
+        },
+        {
+          "key": "economic_head",
+          "title": "Lecture economique auxiliaire",
+          "unit": "Booleen",
+          "default": true,
+          "limits": {
+            "type": "boolean"
+          },
+          "description": "Entraine des poids distincts a predire tanh(resultat net par unite / 2), seulement si une cotation differee a ete enregistree. Cette sortie n'est pas une probabilite ni le PnL attendu; elle n'est pas utilisee pour choisir la mise.",
+          "caution": "Le taux de cette lecture vaut 0.4 fois learning_rate."
+        },
+        {
+          "key": "max_windows",
+          "title": "Fenetre du corpus utilise",
+          "unit": "Episodes recents",
+          "default": 10000,
+          "limits": {
+            "maximum": 50000,
+            "minimum": 30,
+            "type": "integer"
+          },
+          "description": "Selectionne au plus ce nombre de lignes recentes, puis filtre la liquidite. Le corpus reste entier sur disque. La separation 60/20/20 est refaite sur cette selection; changer ce nombre change les partitions.",
+          "caution": "Une selection de donnees est un nouveau protocole a documenter."
+        },
+        {
+          "key": "batch",
+          "title": "Lot CPU",
+          "unit": "Episodes par passage du worker",
+          "default": 10,
+          "limits": {
+            "maximum": 40,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "description": "Nombre maximal de mises a jour traitees ensemble par le worker. Ne correspond pas a une moyenne de gradient sur des exemples simultanes : les exemples sont appris dans l'ordre du plan. Une transaction SQLite valide le lot.",
+          "caution": "Plus grand = interface potentiellement moins reactive; ne change pas l'objectif."
+        }
+      ]
+    },
+    {
+      "name": "Economie et risque",
+      "source": "app/economy06.py",
+      "items": [
+        {
+          "key": "quote_mode",
+          "title": "Origine des multiplicateurs",
+          "unit": "manual / synthetic",
+          "default": "synthetic",
+          "limits": {
+            "enum": [
+              "manual",
+              "synthetic"
+            ],
+            "type": "string"
+          },
+          "description": "manual : trois hypotheses fixes. synthetic : emetteur brownien causal a volatilite estimee, sans formule Euphoria. Dans les deux cas, aucun ordre reel ni prix garanti.",
+          "caution": "Mettre collecte/politique en pause et terminer les contrats avant modification."
+        },
+        {
+          "key": "multipliers",
+          "title": "Trois multiplicateurs affiches",
+          "unit": "Facteurs",
+          "default": [
+            3.0,
+            1.3,
+            3.0
+          ],
+          "limits": {
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array",
+            "each_min": 1.01,
+            "each_max": 100
+          },
+          "description": "Ordre HAUSSE, STABLE, BAISSE. Utilises seulement en mode manuel. Chaque valeur est entre 1.01 et 100. Ils ne changent pas avec le cours tant que le mode reste manuel.",
+          "caution": "Attention a la convention total/profit."
+        },
+        {
+          "key": "convention",
+          "title": "Convention manuelle",
+          "unit": "total / profit",
+          "default": "total",
+          "limits": {
+            "enum": [
+              "total",
+              "profit"
+            ],
+            "type": "string"
+          },
+          "description": "total inclut la mise dans le versement. profit ajoute la mise rendue : le gross devient M+1. En mode synthetique la convention est toujours total, quel que soit ce menu.",
+          "caution": "Un mauvais choix change entierement le resultat economique."
+        },
+        {
+          "key": "execution_delay",
+          "title": "Delai de confirmation",
+          "unit": "Secondes",
+          "default": 2.0,
+          "limits": {
+            "maximum": 5,
+            "minimum": 0,
+            "type": "number"
+          },
+          "description": "Entre la decision et la nouvelle cotation du meme contrat. La fenetre est choisie assez loin pour conserver au moins 10 s de preavis a l'execution. Le delai configure n'est pas une mesure d'Euphoria.",
+          "caution": "Re-cotation au premier tick du moteur apres echeance; refus si trop tard."
+        },
+        {
+          "key": "max_slippage",
+          "title": "Degradation maximale",
+          "unit": "Fraction; UI en %",
+          "default": 0.1,
+          "limits": {
+            "maximum": 0.5,
+            "minimum": 0,
+            "type": "number"
+          },
+          "description": "Refus si le multiplicateur gross execute est inferieur a celui au clic multiplie par 1-max_slippage. Amelioration acceptee. Pour decider, le modele utilise deja une cotation prudente diminuee de cette tolerance.",
+          "caution": "Tolerance, pas un frais ajoute une seconde fois au versement."
+        },
+        {
+          "key": "haircut",
+          "title": "Decote simulee",
+          "unit": "Fraction; UI en %",
+          "default": 0.01,
+          "limits": {
+            "maximum": 0.5,
+            "minimum": 0,
+            "type": "number"
+          },
+          "description": "Multiplie le gross par 1-haircut pour obtenir le multiplicateur effectif. Hypothese de stress appliquee au versement, differente du slippage de confirmation.",
+          "caution": "0.01 = decote de 1 % du versement total."
+        },
+        {
+          "key": "cost_per_stake",
+          "title": "Cout par mise",
+          "unit": "Fraction; UI en %",
+          "default": 0.0,
+          "limits": {
+            "maximum": 0.2,
+            "minimum": 0,
+            "type": "number"
+          },
+          "description": "Cout fictif c*s pour une mise s, sur succes et echec. Il entre dans la reservation, le seuil de rentabilite et le resultat net. Pas une affirmation sur les frais Euphoria.",
+          "caution": "Le cout maximal possible compte dans le budget de risque."
+        },
+        {
+          "key": "min_edge",
+          "title": "Avantage prudent minimal",
+          "unit": "Gain net / unite misee",
+          "default": 0.02,
+          "limits": {
+            "maximum": 2,
+            "minimum": 0,
+            "type": "number"
+          },
+          "description": "Exige p_lower * M_pire - 1 - cout > min_edge. 0.02 signifie plus de 0.02 par euro engage selon nos hypotheses, pas une hausse de 2 % de l'ETH.",
+          "caution": "Augmenter fait generalement attendre plus; ne rend pas les probabilites vraies."
+        },
+        {
+          "key": "stake_mode",
+          "title": "Mode de mise",
+          "unit": "adaptive / fixed",
+          "default": "adaptive",
+          "limits": {
+            "enum": [
+              "adaptive",
+              "fixed"
+            ],
+            "type": "string"
+          },
+          "description": "adaptive compare les montants autorises par l'utilite logarithmique prudente. fixed n'examine que fixed_stake. Tous les garde-fous restent actifs dans les deux modes.",
+          "caution": "C'est une regle explicite, pas un neurone moteur biologique."
+        },
+        {
+          "key": "fixed_stake",
+          "title": "Mise fixe",
+          "unit": "EUR fictifs",
+          "default": 1.0,
+          "limits": {
+            "type": "number",
+            "enum": [
+              0.1,
+              1.0,
+              5.0,
+              10.0,
+              20.0
+            ]
+          },
+          "description": "Utilisee seulement en mode fixed. Si elle depasse le plafond de risque, le programme attend au lieu de la reduire automatiquement.",
+          "caution": "Montants possibles : 0.1 / 1 / 5 / 10 / 20."
+        },
+        {
+          "key": "max_stake",
+          "title": "Mise maximale",
+          "unit": "EUR fictifs",
+          "default": 20.0,
+          "limits": {
+            "type": "number",
+            "enum": [
+              0.1,
+              1.0,
+              5.0,
+              10.0,
+              20.0
+            ]
+          },
+          "description": "Plafond absolu sur les montants candidats. Il ne remplace pas le plafond proportionnel max_fraction.",
+          "caution": "Avec 20 EUR et 5 %, 5/10/20 EUR restent exclus meme si max_stake=20."
+        },
+        {
+          "key": "max_fraction",
+          "title": "Part maximale du capital exposee",
+          "unit": "Fraction; UI en %",
+          "default": 0.05,
+          "limits": {
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "type": "number"
+          },
+          "description": "Budget min(capital*max_fraction, capital-reserve). Le cout total s*(1+c) doit rentrer dans ce budget. Exposer tout le capital est refuse par l'utilite logarithmique meme si la fraction vaut 1.",
+          "caution": "0.05 = 5 %. Au depart sans cout, budget de 1 EUR."
+        },
+        {
+          "key": "drawdown_limit",
+          "title": "Limite depuis le plus haut",
+          "unit": "EUR fictifs",
+          "default": 4.0,
+          "limits": {
+            "exclusiveMinimum": 0,
+            "maximum": 100000,
+            "type": "number"
+          },
+          "description": "La politique arrete les nouvelles mises lorsque pic du capital realise - capital actuel atteint cette valeur. La collecte continue. Ne supprime pas une perte deja realisee.",
+          "caution": "Seuil d'arret, pas garantie de perte maximale exacte : un contrat ouvert peut depasser le seuil."
+        },
+        {
+          "key": "synthetic_margin",
+          "title": "Marge de l'emetteur fictif",
+          "unit": "Fraction; UI en %",
+          "default": 0.1,
+          "limits": {
+            "maximum": 0.5,
+            "minimum": 0,
+            "type": "number"
+          },
+          "description": "En synthetique : M=min(plafond,(1-marge)/p_emetteur). Si ce montant est inferieur a 1.01, aucune cotation. La marge n'est exacte que dans le modele simplifie avant autres limites.",
+          "caution": "Ce parametre ne calibre pas l'emetteur sur Euphoria."
+        },
+        {
+          "key": "max_multiplier",
+          "title": "Plafond de cotation synthetique",
+          "unit": "Facteur total",
+          "default": 12.0,
+          "limits": {
+            "maximum": 100,
+            "minimum": 1.1,
+            "type": "number"
+          },
+          "description": "Limite les cotations extremes de l'emetteur. S'applique uniquement en mode synthetique; ne corrige pas une probabilite de touche mal estimee.",
+          "caution": "Un plafond bas peut supprimer des paris interessants dans le modele; mesurer sans promesse."
+        },
+        {
+          "key": "volatility_floor",
+          "title": "Plancher de volatilite emetteur",
+          "unit": "USD / racine(seconde)",
+          "default": 0.06,
+          "limits": {
+            "maximum": 10,
+            "minimum": 0.001,
+            "type": "number"
+          },
+          "description": "Minimum de sigma. Le modele prend aussi le RMS des variations a 1 s sur 10 et 30 s. Evite une estimation presque nulle apres une courte periode plate.",
+          "caution": "Hypothese de marche; ce n'est pas la volatilite neuronale ou un taux d'interet."
+        }
+      ]
+    }
+  ],
+  "note": "Valeurs par defaut du code, pas les reglages de votre session active."
+}
