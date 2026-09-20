@@ -66,9 +66,9 @@ function renderCard(b) {
   card.append(dl);
   const actions = document.createElement('div'); actions.className = 'brain-actions';
   actions.append(
-    actionButton('Entraîner', 'train', b.actions, () => toast('Bientôt : relié à la page Entraînement pour ce cerveau.')),
-    actionButton('Tester', 'test', b.actions, () => toast('Bientôt : relié à la page Entraînement pour ce cerveau.')),
-    actionButton('Déployer', 'deploy', b.actions, () => toast('Bientôt : relié à la page Marché pour ce cerveau.')),
+    actionButton('Entraîner', 'train', b.actions, () => { location.href = '/entrainement?workshop=' + b.workshop_id; }),
+    actionButton('Tester', 'test', b.actions, () => { location.href = '/entrainement?workshop=' + b.workshop_id; }),
+    actionButton('Déployer', 'deploy', b.actions, () => { location.href = '/entrainement?workshop=' + b.workshop_id; }),
     actionButton('Dupliquer', 'duplicate', b.actions, () => openDuplicate(b)),
     actionButton('Archiver', 'archive', b.actions, () => openArchive(b)),
   );

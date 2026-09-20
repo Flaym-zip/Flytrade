@@ -163,7 +163,15 @@ class Academy08(Academy06):
     def create(self, config):
         if self.auto:raise ValueError('Mettre l\'atelier en pause avant de preparer une autre experience.')
         config,plan,splits,report,_,_=self._build(config)
-        return self._start_session(config,plan,splits,report,'fresh')
+        # A workshop that has never run a protocol keeps its current brain (whatever
+        # identity/weights it already has, including a duplicate's) when the requested
+        # architecture matches it exactly -- the visible cerveau never silently swaps
+        # identity on its own first training. Any mismatch (or a legacy workshop whose
+        # placeholder never matches the caller's config) still mints a fresh brain,
+        # unchanged from prior behaviour.
+        retain=(self.session is None and self.brain.seed==config.seed and self.brain.n_kc==config.n_kc
+                and self.brain.sparsity==config.sparsity and self.brain.use_liquidity==config.use_liquidity)
+        return self._start_session(config,plan,splits,report,'fresh',retain=retain)
 
     def replay(self):
         if self.auto or not self.session:raise ValueError('Mettre en pause une experience existante avant de la rejouer.')

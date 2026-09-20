@@ -25,6 +25,20 @@ class BrainRegistry:
     def _open(self, workshop_id=None):
         return Academy08(self.data, self.expected_source, workshop_id=workshop_id)
 
+    def open(self, workshop_id):
+        """A short-lived Academy08 scoped to one named brain, for the training wizard.
+        Caller owns the returned instance and must call .close() when done."""
+        if not workshop_id:
+            raise ValueError('Cerveau introuvable')
+        a = self._open(workshop_id)
+        self._ensure_schema(a.db)
+        if workshop_id == LEGACY_WORKSHOP_ID:
+            self._ensure_legacy_row(a.db, a)
+        if not a.db.execute('SELECT 1 FROM brains WHERE workshop_id=?', (workshop_id,)).fetchone():
+            a.close()
+            raise ValueError('Cerveau introuvable')
+        return a
+
     def _ensure_schema(self, db):
         db.executescript('''CREATE TABLE IF NOT EXISTS brains(
             workshop_id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL,
@@ -166,7 +180,7 @@ class BrainRegistry:
             legacy=bool(legacy), archived=bool(archived), parent_workshop_id=parent,
             brain_id=a.brain.brain_id, brain_id_short=a.brain.brain_id[:8],
             weight_fingerprint=a.brain.fingerprint(), weight_fingerprint_short=a.brain.fingerprint()[:8],
-            state=state, updates=a.brain.updates,
+            n_kc=a.brain.n_kc, state=state, updates=a.brain.updates,
             balanced_accuracy_validation=val.get('balanced_accuracy'),
             dataset_id=a.config.dataset_id, dataset_name=dataset_name,
             test_opened=bool(a.test_opened),
@@ -189,15 +203,14 @@ class BrainRegistry:
 
     @staticmethod
     def _actions(state):
-        note = 'Relie a la page Entrainement/Marche dans une prochaine etape.'
         if state == 'archive':
             return dict(train=(False, 'Cerveau archive : desarchiver non disponible pour le moment'),
                         test=(False, 'Cerveau archive'), deploy=(False, 'Cerveau archive'),
-                        duplicate=(True, note), archive=(False, 'Deja archive'))
+                        duplicate=(True, None), archive=(False, 'Deja archive'))
         return dict(
-            train=(True, note) if state in ('neuf', 'entraine', 'teste', 'deploye') else (False, 'Entrainement deja en cours'),
-            test=(True, note) if state in ('entraine', 'teste', 'deploye') else (False, 'Terminer un entrainement avant de tester'),
-            deploy=(True, note) if state in ('entraine', 'teste') else (False, 'Le cerveau doit etre entraine (calibration comprise) avant transfert'),
-            duplicate=(True, note),
+            train=(True, 'Ouvre l\'assistant Entrainement pour ce cerveau.') if state in ('neuf', 'entraine', 'teste', 'deploye') else (False, 'Entrainement deja en cours'),
+            test=(True, 'Ouvre l\'assistant Entrainement pour ce cerveau.') if state in ('entraine', 'teste', 'deploye') else (False, 'Terminer un entrainement avant de tester'),
+            deploy=(True, 'Ouvre l\'assistant Entrainement pour deployer ce cerveau.') if state in ('entraine', 'teste', 'deploye') else (False, 'Le cerveau doit etre entraine (calibration comprise) avant transfert'),
+            duplicate=(True, None),
             archive=(True, None) if state != 'entrainement' else (False, 'Mettre l\'entrainement en pause avant d\'archiver'),
         )

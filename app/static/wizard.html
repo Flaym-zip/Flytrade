@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>Flytrade | Entraînement</title>
+<link href="/static/style06.css" rel="stylesheet"/>
+<link href="/static/clarity08.css" rel="stylesheet"/>
+<style>
+.wizard{max-width:920px;margin:0 auto;padding:0 24px 40px}
+.wz-step{opacity:.45;pointer-events:none;transition:opacity .15s}
+.wz-step.active,.wz-step.done{opacity:1;pointer-events:auto}
+.wz-step h2{display:flex;align-items:center;gap:10px}
+.wz-pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin:10px 0}
+.wz-pick label{border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer;font-size:13px}
+.wz-pick label:has(input:checked){border-color:var(--teal);background:#0f2420}
+.wz-pick input{margin-right:8px}
+.wz-pick .disabled{opacity:.4;cursor:not-allowed}
+.wz-pick dl{margin:6px 0 0;font-size:11px;color:var(--muted);display:grid;grid-template-columns:auto 1fr;gap:2px 8px}
+.wz-pick dl dd{margin:0;text-align:right;color:var(--text)}
+.selected-header{position:sticky;top:0;background:var(--bg);z-index:10;padding:10px 24px;border-bottom:1px solid var(--border);display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.selected-header b{color:var(--teal)}
+#metrics-table td,th{font-size:12px}
+.baseline-table{margin-top:10px}
+.confusion{border-collapse:collapse;margin:10px 0}
+.confusion td,.confusion th{border:1px solid var(--border);padding:6px 10px;text-align:center;font-size:12px}
+.confusion .diag{background:#153e34}
+#test-banner{border-left:3px solid var(--teal);background:#0f2420;padding:12px 15px;margin:10px 0}
+.step-badge{width:26px;height:26px;border-radius:50%;border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted)}
+.wz-step.done .step-badge{background:#153e34;border-color:#2E9B87;color:#c2ffea}
+.wz-step.active .step-badge{border-color:var(--teal);color:var(--teal)}
+#toast{position:fixed;bottom:20px;left:20px;max-width:490px;background:#163A30;color:#D1F8EB;border:1px solid var(--teal);padding:14px 18px;border-radius:8px;z-index:100;font-size:14px}
+</style>
+</head><body>
+<header><div class="brand"><b>Flytrade</b><span>ALPHA 08 / LABORATOIRE GUIDÉ</span></div>
+<nav><a class="button" href="/">Marché &amp; portefeuille</a><a class="button" href="/brains">Cerveaux</a><button class="selected" id="tab-wizard">Entraînement</button><a class="button wiki-tab" href="/wiki">Wiki</a></nav>
+</header>
+<div class="notice">SIMULATION UNIQUEMENT — aucune mise, aucun portefeuille, aucun multiplicateur pendant l'entraînement scientifique. L'ancien parcours technique (reprendre / rejouer / continuer / cerveau neuf) reste disponible dans <a href="/training">Actions avancées</a>.</div>
+<div hidden id="error" role="alert"></div>
+<div class="selected-header" id="selected-header" hidden>
+<span>Cerveau : <b id="sel-brain-name">—</b></span>
+<span>État : <b id="sel-brain-state">—</b></span>
+<span><code id="sel-brain-id"></code></span>
+<span>Dataset : <b id="sel-dataset-name">Aucun</b></span>
+</div>
+
+<div class="wizard">
+
+<section class="wz-step" id="step-brain">
+<h2><span class="step-badge">1</span> Choisir le cerveau</h2>
+<p class="plain-help">Cerveaux non archivés du registre. Créez-en un depuis <a href="/brains">la page Cerveaux</a> si la liste est vide.</p>
+<div class="wz-pick" id="brain-pick"></div>
+</section>
+
+<section class="wz-step" id="step-dataset">
+<h2><span class="step-badge">2</span> Choisir le dataset</h2>
+<p class="plain-help">Seules les fenêtres avec exactement une touche H/S/B sont utilisées pour l'apprentissage principal. Multiple et Aucune restent conservées dans le dataset, jamais fusionnées implicitement entre datasets.</p>
+<div class="wz-pick" id="dataset-pick"></div>
+</section>
+
+<section class="wz-step" id="step-protocol">
+<h2><span class="step-badge">3</span> Protocole</h2>
+<div class="metrics">
+<div class="metric">TRAIN<b>~70 %</b></div>
+<div class="metric">VALIDATION<b>~15 %</b></div>
+<div class="metric">TEST<b>~15 %</b></div>
+</div>
+<p class="plain-help">● Protocole recommandé : ordre temporel conservé, frontières purgées, seul TRAIN est mélangé.</p>
+<details id="advanced-protocol"><summary>Paramètres avancés</summary>
+<div class="form-grid">
+<label>Parcours<select id="p-mode"><option selected value="chronological">Naturel (recommandé)</option><option value="balanced">Exclusifs équilibrés</option><option value="curriculum">Équilibré → naturel</option></select></label>
+<label>Passages<input id="p-epochs" max="20" min="1" type="number" value="1"/></label>
+<label>Vitesse d'apprentissage<input id="p-lr" max="1" min=".001" step=".001" type="number" value=".25"/></label>
+<label>Exploration TRAIN<input id="p-epsilon" max="1" min="0" step=".01" type="number" value=".15"/></label>
+<label>Retour après résultat<select id="p-signal"><option selected value="all">Touches des trois cases</option><option value="chosen">Choix seul</option></select></label>
+<label class="check"><input checked id="p-shuffle" type="checkbox"/>Mélanger TRAIN uniquement</label>
+</div>
+</details>
+<button id="prepare-btn">Préparer le protocole</button>
+</section>
+
+<section class="wz-step" id="step-train">
+<h2><span class="step-badge">4</span> Entraîner</h2>
+<button id="train-btn">ENTRAÎNER LE CERVEAU</button>
+<progress id="train-progress" max="1" value="0"></progress>
+<div class="row"><strong id="train-label">Aucun protocole préparé</strong></div>
+<div class="table-scroll"><table id="live-metrics"><thead><tr><th>Métrique</th><th>Valeur</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section class="wz-step" id="step-validation">
+<h2><span class="step-badge">5</span> Validation</h2>
+<div id="validation-body"></div>
+</section>
+
+<section class="wz-step" id="step-test">
+<h2><span class="step-badge">6</span> Test final</h2>
+<div id="test-body">
+<div id="test-banner">TEST FINAL — Jamais consulté.<p class="plain-help">Le test est gardé secret pour mesurer le cerveau sur des données qu'il n'a jamais utilisées pour être choisi ou réglé.</p></div>
+<button id="open-test-btn">OUVRIR LE TEST FINAL</button>
+</div>
+<div id="test-results" hidden></div>
+</section>
+
+<section class="wz-step" id="step-deploy">
+<h2><span class="step-badge">7</span> Déployer</h2>
+<p class="plain-help">Copie les poids et la calibration gelés vers le marché. L'interface Marché elle-même n'est pas encore modifiée par cette étape.</p>
+<button id="deploy-btn">DÉPLOYER SUR LE MARCHÉ</button>
+</section>
+
+</div>
+
+<dialog id="confirm-dialog"><form method="dialog">
+<div class="eyebrow">VÉRIFIER AVANT DE CONTINUER</div><h2 id="confirm-title"></h2><div id="confirm-body"></div>
+<div class="row wrap"><button class="subtle" id="confirm-cancel" value="cancel">Annuler</button><button id="confirm-yes" value="confirm">Confirmer</button></div>
+</form></dialog>
+<div hidden id="toast" role="status"></div>
+<script defer src="/static/wizard.js"></script>
+</body></html>

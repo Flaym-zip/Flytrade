@@ -21,3 +21,18 @@ def classification_metrics(actual, predicted):
     matrix=[[0,0,0] for _ in range(3)]
     for y,p in zip(actual,predicted):matrix[y][p]+=1
     return stats_from_confusion(matrix)
+
+
+def baseline_metrics(support):
+    """Trivial baselines for comparison, from the actual class counts of a phase.
+    'hasard' is the exact expectation of a uniform three-way random guess, not a simulation.
+    """
+    n=sum(support)
+    out={}
+    for a,label in enumerate(('hausse','stable','baisse')):
+        matrix=[[support[i] if col==a else 0 for col in range(3)] for i in range(3)]
+        out['toujours_'+label]=stats_from_confusion(matrix)
+    out['hasard']={'n':n,'confusion_matrix':None,'support':support,
+                   'recall':[1/3,1/3,1/3] if n else [None]*3,
+                   'accuracy':1/3 if n else None,'balanced_accuracy':1/3 if n else None}
+    return out

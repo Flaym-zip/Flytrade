@@ -13,8 +13,10 @@ from .market import Market,stream
 from .orderbook import OrderBook,stream_book
 from .run08 import Run08 as Run06
 from .economy06 import Rules06
+from .academy06 import LEGACY_WORKSHOP_ID
 from .academy08 import Academy08 as Academy06, Config06
 from .brains import BrainRegistry
+from .metrics import baseline_metrics
 from .feed07 import KrakenMarket, KrakenBook, stream_kraken, stream_kraken_book, poll_rest
 from .wiki07 import wiki_parameters
 
@@ -125,6 +127,8 @@ async def guide_page():return FileResponse(STATIC/'index06.html')
 async def wiki_page():return FileResponse(STATIC/'wiki08.html')
 @app.get('/brains')
 async def brains_page():return FileResponse(STATIC/'brains.html')
+@app.get('/entrainement')
+async def wizard_page():return FileResponse(STATIC/'wizard.html')
 @app.get('/api/wiki/parameters')
 async def parameters():return wiki_parameters()
 @app.get('/api/feed/diagnostics')
@@ -162,6 +166,9 @@ class BrainCreateRequest(BaseModel):
 class BrainDuplicateRequest(BaseModel):
     model_config=ConfigDict(extra='forbid')
     name:str=Field(min_length=1,max_length=80)
+class StepRequest(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    batch:int=Field(default=20,ge=1,le=500)
 
 @app.post('/api/controls')
 async def controls(p:Controls,request:Request):
@@ -224,6 +231,102 @@ async def brains_archive(workshop_id:str,request:Request):
         await asyncio.to_thread(request.app.state.brains.archive,workshop_id)
         live=request.app.state.run.brain.brain_id
         return await asyncio.to_thread(request.app.state.brains.get,workshop_id,live,request.app.state.academy)
+@app.get('/api/brains/{workshop_id}')
+async def brains_get(workshop_id:str,request:Request):
+    async with request.app.state.train_lock:
+        live=request.app.state.run.brain.brain_id
+        return await asyncio.to_thread(request.app.state.brains.get,workshop_id,live,request.app.state.academy)
+
+# ---- Training wizard: one named brain at a time (Phase 1.2). ----
+def _open_workshop(request,workshop_id):
+    """The legacy workshop is the SAME object the old Training page holds live in
+    memory for the whole process; opening a second, independent Academy08 on that
+    row would desync from it (each writes over the other's saved state). Route it
+    through the shared singleton instead, so both pages read/write one truth. Any
+    other workshop has no competing live instance, so a short-lived open is safe."""
+    if workshop_id==LEGACY_WORKSHOP_ID:
+        return request.app.state.academy,False
+    return request.app.state.brains.open(workshop_id),True
+
+def _sync_legacy_snapshot(request,a,owns):
+    if not owns:request.app.state.train_snapshot=a.snapshot()
+
+@app.get('/api/brains/{workshop_id}/session')
+async def wizard_session(workshop_id:str,request:Request):
+    async with request.app.state.train_lock:
+        def run():
+            a,owns=_open_workshop(request,workshop_id)
+            try:return a.snapshot()
+            finally:
+                if owns:a.close()
+        return await asyncio.to_thread(run)
+
+@app.post('/api/brains/{workshop_id}/train/prepare')
+async def wizard_train_prepare(workshop_id:str,p:Config06,request:Request):
+    async with request.app.state.train_lock:
+        def run():
+            a,owns=_open_workshop(request,workshop_id)
+            try:
+                # The brain's own architecture always wins: the wizard never lets a
+                # protocol silently swap KC/seed/sparsity/liquidity or the economic head.
+                cfg=p.model_copy(update=dict(n_kc=a.brain.n_kc,seed=a.brain.seed,
+                    sparsity=a.brain.sparsity,use_liquidity=a.brain.use_liquidity,economic_head=False))
+                result=a.create(cfg);_sync_legacy_snapshot(request,a,owns);return result
+            finally:
+                if owns:a.close()
+        return await asyncio.to_thread(run)
+
+@app.post('/api/brains/{workshop_id}/train/step')
+async def wizard_train_step(workshop_id:str,p:StepRequest,request:Request):
+    async with request.app.state.train_lock:
+        def run():
+            a,owns=_open_workshop(request,workshop_id)
+            try:
+                a.step_batch(p.batch);result=a.snapshot();_sync_legacy_snapshot(request,a,owns);return result
+            finally:
+                if owns:a.close()
+        return await asyncio.to_thread(run)
+
+@app.post('/api/brains/{workshop_id}/test/open')
+async def wizard_test_open(workshop_id:str,request:Request):
+    async with request.app.state.train_lock:
+        def run():
+            a,owns=_open_workshop(request,workshop_id)
+            try:
+                a.open_test();result=a.snapshot();_sync_legacy_snapshot(request,a,owns);return result
+            finally:
+                if owns:a.close()
+        return await asyncio.to_thread(run)
+
+@app.get('/api/brains/{workshop_id}/metrics')
+async def wizard_metrics(workshop_id:str,request:Request):
+    async with request.app.state.train_lock:
+        def run():
+            a,owns=_open_workshop(request,workshop_id)
+            try:
+                out={'test_opened':bool(a.test_opened)}
+                validation=a.metrics.get('Calibration gelee')
+                if validation:out['validation']=dict(validation,baselines=baseline_metrics(validation['support']))
+                test=a.metrics.get('Test gele')
+                if test:out['test']=dict(test,baselines=baseline_metrics(test['support']))
+                return out
+            finally:
+                if owns:a.close()
+        return await asyncio.to_thread(run)
+
+@app.post('/api/brains/{workshop_id}/deploy')
+async def wizard_deploy(workshop_id:str,p:Confirm,request:Request):
+    if not p.confirm:raise ValueError('Confirmation requise')
+    async with request.app.state.train_lock:
+        def run():
+            a,owns=_open_workshop(request,workshop_id)
+            try:return a.deployable()
+            finally:
+                if owns:a.close()
+        b,c,m=await asyncio.to_thread(run)
+        async with request.app.state.lock:request.app.state.run.deploy(b,c,m)
+    return {'ok':True,'message':'Copie gelee deployee ; nouveau portefeuille de 20 EUR, politique en pause'}
+
 @app.post('/api/training/create')
 async def create(p:Config06,request:Request):
     async with request.app.state.train_lock:
