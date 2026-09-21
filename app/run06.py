@@ -303,6 +303,17 @@ class Run06:
         if limit:sql='SELECT payload FROM (SELECT id,payload FROM opportunities ORDER BY id DESC LIMIT ?) ORDER BY id'
         return [json.loads(x[0]) for x in self.db.execute(sql,(limit,) if limit else ())]
 
+    def wait_reason_counts(self,limit=500):
+        """Read-only diagnostic: why the recent ATTENDRE decisions happened.
+        Never used by the economic engine itself, purely for display."""
+        counts={}
+        for (raw,) in self.db.execute('SELECT payload FROM opportunities ORDER BY id DESC LIMIT ?',(limit,)):
+            v=json.loads(raw)
+            if v.get('economic_action')=='attendre':
+                reason=v.get('economic_reason') or '?'
+                counts[reason]=counts.get(reason,0)+1
+        return dict(sorted(counts.items(),key=lambda kv:-kv[1])[:6])
+
     def dataset_info(self):
         now=time.monotonic()
         if self._dataset_cache and now-self._dataset_cache_at<5:return dict(self._dataset_cache,collect=self.collect)

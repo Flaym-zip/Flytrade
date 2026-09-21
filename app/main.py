@@ -139,6 +139,9 @@ async def feed_diagnostics(request:Request):
 @app.get('/api/state')
 async def state(request:Request):
     async with request.app.state.lock:return request.app.state.run.snapshot()
+@app.get('/api/wait-reasons')
+async def wait_reasons(request:Request):
+    async with request.app.state.lock:return request.app.state.run.wait_reason_counts()
 @app.get('/api/training/state')
 async def training_state(request:Request):return request.app.state.train_snapshot
 

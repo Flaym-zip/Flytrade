@@ -2,6 +2,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const LABEL = {hausse: 'HAUSSE', stable: 'STABLE', baisse: 'BAISSE', attendre: 'ATTENDRE'};
+let S = null, currentSettings = null, center = null, received = 0, focus = true;
 
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.hidden = false;
@@ -17,9 +18,13 @@ async function api(path, opts) {
   if (!res.ok) throw new Error(body.detail || body.message || ('Erreur ' + res.status));
   return body;
 }
-function eur(x) { return (x ?? 0).toFixed(2).replace('.', ',') + ' €'; }
+function eur(x) { return (x ?? 0).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' €'; }
 function pct(x) { return x == null ? '—' : (x * 100).toFixed(1) + ' %'; }
-function num(x, d = 3) { return x == null ? '—' : Number(x).toFixed(d); }
+function metric(parent, label, value) {
+  const d = document.createElement('div'); d.className = 'metric';
+  const b = document.createElement('b'); b.textContent = value;
+  d.append(b, document.createTextNode(label)); parent.append(d);
+}
 function fmtTime(iso) { try { return new Date(iso).toLocaleTimeString('fr-FR'); } catch { return iso; } }
 
 // ---------- Deployed brain header ----------
@@ -34,66 +39,37 @@ async function loadDeployedHeader(state) {
   $('dep-fingerprint').textContent = 'weight_fingerprint ' + (state.weight_fingerprint || '').slice(0, 8);
 }
 
-// ---------- Bloc 1: brain ----------
-function renderBrainBlock(last) {
-  const row = $('hsb-row'); row.innerHTML = '';
-  const labels = ['HAUSSE', 'STABLE', 'BAISSE'];
-  const preferred = last ? last.brain_preferred_action : null;
-  for (let a = 0; a < 3; a++) {
-    const cell = document.createElement('div'); cell.className = 'hsb-cell';
-    const key = ['hausse', 'stable', 'baisse'][a];
-    if (preferred === key) cell.classList.add('preferred');
-    const score = last ? last.brain_scores[a] : null;
-    const prob = last && last.probabilities ? last.probabilities[a] : null;
-    cell.innerHTML = `<label>${labels[a]}</label><div class="score">${num(score, 3)}</div>` +
-      `<div class="prob">p calibrée ${prob && prob.p != null ? pct(prob.p) : 'non prête'}</div>`;
-    row.append(cell);
-  }
-  $('brain-preference').textContent = preferred ? LABEL[preferred] : 'Aucune décision encore';
-  const tie = last && last.brain_tie_break;
-  const tieNote = $('tie-note');
-  if (tie && tie.used) {
-    tieNote.hidden = false;
-    tieNote.textContent = 'Égalité entre ' + tie.candidates.map(c => LABEL[c]).join(' / ') +
-      ' — la case ' + LABEL[tie.selected] + ' a été retenue par tirage de départage (tie-break), pas par préférence plus forte.';
+// ---------- Decision strip ----------
+function renderDecisionStrip(last) {
+  $('brain-preference').textContent = last ? LABEL[last.brain_preferred_action] : 'En attente de la première fenêtre';
+  const box = $('econ-decision'); const val = $('decision-value'); const reason = $('decision-reason');
+  if (!last) { box.className = ''; val.textContent = '—'; reason.textContent = ''; return; }
+  if (last.economic_action === 'attendre') {
+    box.className = 'wait';
+    val.textContent = 'ATTENDRE';
+    reason.textContent = 'Raison : ' + (last.economic_reason || '—');
   } else {
-    tieNote.hidden = true;
+    box.className = 'trade';
+    val.textContent = 'TRADE ' + eur(last.economic_stake);
+    reason.textContent = 'Case verrouillée : ' + LABEL[last.economic_action] + ' · × ' + (last.multiplier ?? '—');
   }
 }
 
-// ---------- Bloc 2: economics ----------
-function renderEconBlock(last) {
-  const tbody = document.querySelector('#econ-table tbody'); tbody.innerHTML = '';
-  const labels = ['Hausse', 'Stable', 'Baisse'];
-  if (last && last.policy && last.quotes) {
-    for (let a = 0; a < 3; a++) {
-      const c = last.policy.candidates[a];
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${labels[a]}</td><td>${c.p != null ? pct(c.p) : 'non prête'}</td>` +
-        `<td>${num(last.quotes.effective_gross[a], 3)}</td><td>${num(c.ev, 3)}</td><td>${num(c.ev_lower, 3)}</td>`;
-      tbody.append(tr);
-    }
-  }
-  const line = $('decision-line'); const val = $('decision-value'); const detail = $('decision-detail');
-  detail.innerHTML = '';
-  if (!last) {
-    line.className = 'decision-line'; val.textContent = 'Aucune décision encore'; return;
-  }
-  const action = last.economic_action;
-  if (action === 'attendre') {
-    line.className = 'decision-line wait';
-    val.textContent = 'ATTENDRE';
-    const reason = document.createElement('div'); reason.className = 'wait-reason';
-    reason.textContent = 'Raison : ' + (last.economic_reason || '—');
-    detail.append(reason);
-  } else {
-    line.className = 'decision-line trade';
-    val.textContent = 'TRADE ' + LABEL[action];
-    const info = document.createElement('div'); info.className = 'wait-reason';
-    info.textContent = 'Mise proposée : ' + eur(last.economic_stake) +
-      (last.risk_decision ? ' · risque budget ' + eur(last.risk_decision.risk_budget) : '');
-    detail.append(info);
-  }
+// ---------- Stats (trades only, never mixed with waits) ----------
+function renderStats(stat) {
+  $('capital').textContent = eur(stat.capital);
+  $('pnl').textContent = (stat.net >= 0 ? '+' : '') + eur(stat.net);
+  $('drawdown').textContent = 'Baisse max : ' + eur(stat.max_drawdown);
+  $('trades').textContent = String(stat.trades);
+  $('coverage').textContent = pct(stat.coverage) + ' de couverture';
+  $('wl').textContent = stat.wins + ' / ' + stat.losses;
+  $('winrate').textContent = 'Win rate ' + pct(stat.hit_rate);
+  const box = $('secondary-stats'); box.innerHTML = '';
+  metric(box, 'total misé', eur(stat.staked));
+  metric(box, 'PnL moyen / trade', stat.trades ? eur(stat.net / stat.trades) : '—');
+  metric(box, 'choix hausse (trades)', String((stat.chosen || [0, 0, 0])[0]));
+  metric(box, 'choix stable (trades)', String((stat.chosen || [0, 0, 0])[1]));
+  metric(box, 'choix baisse (trades)', String((stat.chosen || [0, 0, 0])[2]));
 }
 
 // ---------- History ----------
@@ -110,76 +86,157 @@ function renderHistory(recent) {
   const tbody = document.querySelector('#history-table tbody'); tbody.innerHTML = '';
   for (const r of recent) {
     const tr = document.createElement('tr');
-    const reasonOrStake = r.economic_action === 'attendre'
-      ? (r.economic_reason || '—')
-      : 'Mise ' + eur(r.economic_stake);
     const tdTime = document.createElement('td'); tdTime.textContent = fmtTime(r.created_at);
     const tdBrain = document.createElement('td'); tdBrain.textContent = LABEL[r.brain_preferred_action] || '—';
     const tdEcon = document.createElement('td'); tdEcon.textContent = r.economic_action === 'attendre' ? 'ATTENDRE' : 'TRADE ' + LABEL[r.economic_action];
-    const tdReason = document.createElement('td'); tdReason.textContent = reasonOrStake;
+    const tdStake = document.createElement('td'); tdStake.textContent = r.economic_action === 'attendre' ? '—' : eur(r.economic_stake);
     const tdResult = document.createElement('td'); tdResult.append(resultBadge(r));
-    tr.append(tdTime, tdBrain, tdEcon, tdReason, tdResult);
+    tr.append(tdTime, tdBrain, tdEcon, tdStake, tdResult);
     tbody.append(tr);
   }
 }
 
-// ---------- Technical details (collapsed) ----------
-function renderDetails(state) {
-  const box = $('tech-metrics'); box.innerHTML = '';
-  const rows = [
-    ['brain_id complet', state.brain_id],
-    ['weight_fingerprint complet', state.weight_fingerprint],
-    ['generation', state.stats ? state.stats.updates : '—'],
-    ['calibration n', state.calibration ? state.calibration.n : '—'],
-  ];
-  for (const [k, v] of rows) {
-    const div = document.createElement('div'); div.className = 'metric';
-    div.innerHTML = `${k}<b style="font-size:12px;word-break:break-all">${v}</b>`;
-    box.append(div);
-  }
-  $('tech-note').textContent = state.deployment ? ('Déployé : ' + state.deployment.at) : 'Aucun déploiement enregistré.';
+// ---------- Wait diagnostics (collapsed) ----------
+async function loadWaitStats(stat) {
+  const box = $('wait-stats'); box.innerHTML = '';
+  metric(box, 'opportunités', String(stat.opportunities));
+  metric(box, 'trades', String(stat.trades));
+  metric(box, 'attentes', String(stat.waits));
+  metric(box, 'couverture', pct(stat.coverage));
+  try {
+    const reasons = await api('/api/wait-reasons');
+    const tbody = document.querySelector('#reason-table tbody'); tbody.innerHTML = '';
+    for (const [reason, count] of Object.entries(reasons)) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${reason}</td><td>${count}</td>`;
+      tbody.append(tr);
+    }
+  } catch (e) { /* diagnostic only */ }
 }
 
-// ---------- Controls ----------
+// ---------- Technical details ----------
+function renderDetails(state) {
+  const box = $('tech-metrics'); box.innerHTML = '';
+  metric(box, 'brain_id complet', state.brain_id);
+  metric(box, 'weight_fingerprint complet', state.weight_fingerprint);
+  metric(box, 'calibration n', state.calibration ? state.calibration.n : '—');
+  metric(box, 'déploiement', state.deployment ? state.deployment.at : 'aucun');
+}
+
+// ---------- Risk / stake controls (reuses Rules06 / /api/settings as-is) ----------
+function fillRiskForm(s) {
+  const f = $('risk-form');
+  f.elements.stake_mode.value = s.stake_mode;
+  f.elements.fixed_stake.value = s.fixed_stake;
+  f.elements.max_stake.value = s.max_stake;
+  f.elements.max_fraction_pct.value = (s.max_fraction * 100).toFixed(1);
+  f.elements.drawdown_limit.value = s.drawdown_limit;
+  f.elements.min_edge.value = s.min_edge;
+  const q = $('quote-form');
+  q.elements.quote_mode.value = s.quote_mode;
+  q.elements.m0.value = s.multipliers[0];
+  q.elements.m1.value = s.multipliers[1];
+  q.elements.m2.value = s.multipliers[2];
+}
+
+// Activity presets touch ONLY min_edge (the acceptance criterion). Risk limits
+// (max_fraction, max_stake, drawdown_limit, fixed_stake) are the user's own,
+// explicit choice below and a preset must never raise them.
+const PRESETS = {
+  prudent: {min_edge: .08},
+  normal: {min_edge: .02},
+  actif: {min_edge: 0},
+};
+function markPreset(name) {
+  for (const p of ['prudent', 'normal', 'actif']) $('preset-' + p).classList.toggle('active', p === name);
+}
+async function applyPreset(name) {
+  if (!currentSettings) return;
+  const overrides = PRESETS[name];
+  const merged = Object.assign({}, currentSettings, overrides);
+  try {
+    await api('/api/settings', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(merged)});
+    currentSettings = merged; fillRiskForm(merged); markPreset(name);
+    toast('Préréglage ' + name.toUpperCase() + ' appliqué.');
+  } catch (e) { showError(e.message); }
+}
+
+// ---------- Chart animation (reuses grid.js as-is) ----------
+function animate() {
+  if (S) {
+    const m = S.market;
+    if (center === null) center = m.price;
+    if (focus && m.price != null) center += (m.price - center) * .18;
+    window.FlyGrid.draw($('chart'), {
+      now: (m.exchange_time || 0) + (m.connected ? Math.min(.5, (performance.now() - received) / 1000) : 0),
+      price: m.price, center, points: m.chart || [], preview: S.preview, trade: S.active_trade,
+    }, {center});
+  }
+  requestAnimationFrame(animate);
+}
+
+// ---------- Refresh loop ----------
 async function refresh() {
   let state;
-  try { state = await api('/api/state'); }
+  try { state = await api('/api/state'); received = performance.now(); }
   catch (e) { showError(e.message); return; }
-  $('connection').textContent = state.market && state.market.connected ? 'Connecté' : 'Hors ligne';
+  S = state;
+  $('connection').textContent = state.market.connected ? 'Connecté' : 'Hors ligne';
+  $('feed').textContent = state.market.price != null ? (state.market.price.toFixed(2) + ' USD') : 'En attente du flux';
   $('modes').textContent = (state.collect ? 'Collecte active' : 'Collecte arrêtée') +
     (state.policy_enabled ? ' · politique active' : ' · politique en pause');
-  $('capital').textContent = eur(state.stats ? state.stats.capital : 20);
-  $('pnl').textContent = (state.stats && state.stats.net >= 0 ? '+' : '') + eur(state.stats ? state.stats.net : 0);
   await loadDeployedHeader(state);
-  renderBrainBlock(state.last);
-  renderEconBlock(state.last);
+  renderDecisionStrip(state.last);
+  renderStats(state.stats);
   renderHistory(state.recent || []);
   renderDetails(state);
+  if (!currentSettings) { currentSettings = state.settings; fillRiskForm(state.settings); }
+  if (document.querySelector('details:has(#wait-stats)').open) await loadWaitStats(state.stats);
 }
 
 function wire() {
-  $('collect-on').addEventListener('click', async () => {
-    try { await api('/api/controls', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({collect: true})}); await refresh(); }
-    catch (e) { showError(e.message); }
+  $('focus').addEventListener('click', () => { focus = !focus; $('focus').textContent = 'Autofocus ' + (focus ? 'activé' : 'figé'); });
+  for (const [id, body] of [['collect-on', {collect: true}], ['collect-off', {collect: false}],
+                             ['policy-on', {policy: true}], ['policy-off', {policy: false}]]) {
+    $(id).addEventListener('click', async () => {
+      try { await api('/api/controls', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)}); await refresh(); }
+      catch (e) { showError(e.message); }
+    });
+  }
+  for (const name of ['prudent', 'normal', 'actif']) $('preset-' + name).addEventListener('click', () => applyPreset(name));
+
+  $('risk-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const d = new FormData(ev.target);
+    const merged = Object.assign({}, currentSettings, {
+      stake_mode: d.get('stake_mode'), fixed_stake: Number(d.get('fixed_stake')), max_stake: Number(d.get('max_stake')),
+      max_fraction: Number(d.get('max_fraction_pct')) / 100, drawdown_limit: Number(d.get('drawdown_limit')),
+      min_edge: Number(d.get('min_edge')),
+    });
+    try {
+      await api('/api/settings', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(merged)});
+      currentSettings = merged; markPreset(''); toast('Réglages de risque appliqués.');
+    } catch (e) { showError(e.message); }
   });
-  $('collect-off').addEventListener('click', async () => {
-    try { await api('/api/controls', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({collect: false})}); await refresh(); }
-    catch (e) { showError(e.message); }
-  });
-  $('policy-on').addEventListener('click', async () => {
-    try { await api('/api/controls', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({policy: true})}); await refresh(); }
-    catch (e) { showError(e.message); }
-  });
-  $('policy-off').addEventListener('click', async () => {
-    try { await api('/api/controls', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({policy: false})}); await refresh(); }
-    catch (e) { showError(e.message); }
+
+  $('quote-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const d = new FormData(ev.target);
+    const merged = Object.assign({}, currentSettings, {
+      quote_mode: d.get('quote_mode'), multipliers: [Number(d.get('m0')), Number(d.get('m1')), Number(d.get('m2'))],
+    });
+    try {
+      await api('/api/settings', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(merged)});
+      currentSettings = merged; toast('Cotations de simulation appliquées.');
+    } catch (e) { showError(e.message); }
   });
 }
 
 function init() {
   wire();
   refresh();
-  setInterval(refresh, 2000);
+  setInterval(refresh, 500);
+  animate();
 }
 init();
 })();
